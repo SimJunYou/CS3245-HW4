@@ -14,9 +14,9 @@ csv.field_size_limit(int(ct.c_ulong(-1).value // 2))  # found a fix from StackOv
 
 def make_doc_read_generator(in_file: str) -> TermInfoTupleGenerator:
     """
-    Generator function for the next (term, doc_length, doc_id) tuple.
+    Generator function for the next (term, term_pos, doc_length, doc_id) tuple.
     Call this function to make the generator first, then use next() to generate the next tuple.
-    Yields (None, None, None) when done.
+    Yields (None, None, None, None) when done.
     """
     with open(in_file, mode='r', encoding='utf-8', newline='') as doc:
         doc_reader = csv.reader(doc)
@@ -27,14 +27,13 @@ def make_doc_read_generator(in_file: str) -> TermInfoTupleGenerator:
             content = content.lower()
             tokens = tokenize(content)
             doc_length = len(tokens)
-            if i % 100 == 0:
-                print("progress:", i)
+            print("progress:", i)
 
             # for this assignment, we can assume that document names are integers without exception
             # since we are using a generator, we only count the number of tokens once per file
-            for tok in tokens:
-                yield tok, doc_length, int(doc_id)
-    yield None, None, None
+            for term_pos, term in enumerate(tokens):
+                yield term, term_pos, doc_length, int(doc_id)
+    yield None, None, None, None
 
 
 def tokenize(doc_text: str) -> list[str]:
