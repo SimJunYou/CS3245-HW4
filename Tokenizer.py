@@ -18,6 +18,8 @@ def make_doc_read_generator(in_file: str) -> TermInfoTupleGenerator:
     Generator function for the next (term, term_pos, doc_length, doc_id) tuple.
     Call this function to make the generator first, then use next() to generate the next tuple.
     Yields (None, None, None, None) when done.
+    :param in_file: The name of the input file
+    :return: A generator object for the term information tuple (see above)
     """
 
     # read the provided stop words file ONCE and keep stop words in memory
@@ -55,7 +57,7 @@ def tokenize(doc_text: str, zone: str, stop_words: Set[str]) -> List[str]:
     :param doc_text: The text to be tokenized
     :param zone: The zone the text is associated with
     :param stop_words: The set of stop words to be used
-    :
+    :return: List of tokens
     """
     # case folding
     doc_text = doc_text.lower()
@@ -83,5 +85,6 @@ def clean_operand(operand: str) -> str:
     Case-folds and stems a single operand (token).
     For use in Parser, when parsing queries.
     :param operand: The token to be case-folded and stemmed
+    :return: Case-folded and stemmed token
     """
     return STEMMER.stem(operand.lower())
