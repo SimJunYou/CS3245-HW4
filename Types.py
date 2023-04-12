@@ -3,6 +3,7 @@ from typing import Optional, Iterator, Tuple
 
 DocId = int
 DocLength = float
+DocFreq = int
 Term = str
 TermFreq = int
 TermPos = int

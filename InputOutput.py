@@ -3,7 +3,6 @@ from typing import Dict, List, Mapping
 from Types import *
 
 import pickle
-from math import floor, sqrt
 from itertools import chain  # for flattening a nested list quickly
 
 
@@ -22,71 +21,104 @@ class PostingReader:
 
     def __init__(self, file, dct):
         self._filename: str = file
-        self._dct: Dict[Term, int] = dct
+        self._dct: Dict[Term, int] = dct  # Term -> pointer
         self._loc: int = 0
-        self._done: bool = False  # flag for completing the reading of the given posting list
+        self._done: bool = False       # flag for completing the reading of the given posting list
+        self._remaining_docs: int = 0  # keeps count of remaining docs in current posting list
+        self._remaining_pos: int = 0   # keeps count of remaining term positions left in current doc
+        self._term_freq: TermFreq = 0  # records term frequency of current doc:term pair
+        self._current_doc: DocId = 0   # records the id of the current doc
+        self._curr_pos: TermPos = 0    # records the current term position (to undo gap encoding)
 
-    def __enter__(self):
-        self._f = open(self._filename, "r")
-        return self
-
-    def seek_term(self, term):
+    def seek_term(self, term: str) -> DocFreq:
         """
         To be used right after entering the context manager!
         Seeks file to the desired term and returns the document frequency.
+        :param term: The desired term
+        :return: The document frequency
         """
 
         # we should be checking that terms are in dictionary in process_query
         assert term in self._dct, "Term not found in dictionary!"
 
+        # reset the completion flag and seek to the posting list
+        self._done = False
         self._f.seek(self._dct[term], 0)
 
-        # get document frequency
-        doc_freq_str = char = ""
-        while char != "$":
-            doc_freq_str += char
-            char = self._f.read(1)
-        doc_freq = int(doc_freq_str)
+        # get document frequency and update remaining count
+        doc_freq = self.read_next_int()
+        self._remaining_docs = doc_freq - 1  # count will be 0 when we are on the last document
 
-        # since text files don't support relative seeks,
-        # we need to store our previous location!
-        # save location after reading the document frequency
+        # get current document ID and update
+        curr_doc = self.read_next_int()
+        self._current_doc = curr_doc
+
+        # get term pos count for current doc and update remaining count
+        term_pos_num = self.read_next_int()
+        self._remaining_pos = term_pos_num  # this is for internal use (changes)
+        self._term_freq = term_pos_num  # this is for data (does not change)
+
+        # in our implementation, we save location after reading and re-seek each time
         self._loc = self._f.tell()
 
         return doc_freq
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        # parameters here are required by Python, we won't use them
-        self._f.close()
+    def read_next_int(self) -> int:
+        """
+        Reads the next integer from the encoded file by decoding the variable byte encoding.
+        :return: Next integer decoded from the file
+        """
+        buffer: int = int.from_bytes(self._f.read(1), sys.byteorder)
+        collected_int: int = 0
+        bits_added = 0
+        while True:
+            # inverse of the way we did variable byte encoding
+            collected_int |= (buffer & 0b0111_1111) << bits_added
+            bits_added += 7
+            if buffer & 0b1000_0000:  # if continuation byte, we should continue to read
+                buffer = int.from_bytes(self._f.read(1), sys.byteorder)
+            else:
+                break
+        return collected_int
 
-    def read_entry(self):
+    def read_entry(self) -> Tuple[DocId, TermFreq, TermPos]:
         """
         Using the current position of the instance's file pointer,
         read the next entry in the posting list and return it as a tuple:
-        >> (doc_id, term_freq)
+        >> (doc_id, term_freq, term_pos)
+        :return: Tuple of document ID, term frequency, term position
         """
         # throw error if we're trying to read a completely read posting list
         assert not self._done, "Reading of posting list is already complete!"
 
         self._f.seek(self._loc, 0)
 
-        entry = ""
-        char = ""
-        while char != "," and char != "|":
-            entry += char
-            char = self._f.read(1)
-        if char == "|":
-            self._done = True  # update flag if the posting list is done
+        if self._remaining_pos:  # if there are still term positions remaining,
+            self._remaining_pos -= 1
+            self._curr_pos += self.read_next_int()  # increment gap to get actual term pos
+        else:  # else, we go to the next document
+            self._remaining_docs -= 1
+            # read the headers -> (doc_id)(num_tp), then read the first term pos
+            self._current_doc = self.read_next_int()
+            self._remaining_pos = self.read_next_int() - 1  # we will read one term pos, so -1
+            self._curr_pos = self.read_next_int()  # reset term pos at each document
 
-        doc_id, term_freq = entry.split("*")
+        if self._remaining_pos == 0 and self._remaining_docs == 0:
+            self._done = True
 
-        self._loc = self._f.tell()
-
-        # return a integer tuple
-        return int(doc_id), int(term_freq)
+        self._loc = self._f.tell()  # update position
+        return self._current_doc, self._term_freq, self._curr_pos
 
     def is_done(self):
         return self._done
+
+    def __enter__(self):
+        self._f = open(self._filename, "rb")
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        # parameters here are required by Python, we won't use them
+        self._f.close()
 
 
 def unpickle_file(filename):
@@ -133,6 +165,8 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
 
     with open(out_postings, "wb") as postings_fp:
         for term, posting_list in dictionary.items():
+            if term == "content@sim":
+                print(term, posting_list)
             posting_list_serialized: bytes
             posting_list_serialized = serialize_posting(posting_list, write_skips)
 
@@ -155,7 +189,7 @@ def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
     """
     Turns a posting list into a bytearray, and returns the bytearray.
     The byte format is:
-        (freq)(num_docs)[doc_1][doc_2][...][doc_n]
+        (doc_freq)[doc_1][doc_2][...][doc_n]
     Each [doc_x] above is short for the following:
         (doc_id)(num_tp)(tp_1)(tp_2)(...)(tp_m)
     All items in the byte format, when fully expanded, are integers encoded using variable byte encoding.
@@ -181,7 +215,7 @@ def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
     prepared_entries = flatten([prepare_entry(doc_id, term_pos_list) for doc_id, term_pos_list in posting_list])
 
     # add in the header as described in the docstring
-    header = [doc_freq, len(posting_list)]
+    header = [doc_freq]
     final_entries = header + prepared_entries
 
     # variable-byte encode everything in the list of final entries, then return the bytearray
@@ -247,16 +281,17 @@ def prepare_entry(doc_id: DocId, term_pos_list: List[TermPos]) -> List[int]:
 def variable_byte_encode(num: int) -> bytes:
     """
     Follow the variable byte encoding taught in lecture!
+    Instead of having the 8th bit be 0 for continuation, we will set it to 1 for continuation.
     :param num: The number to be encoded
     :return: The encoded number in byte format
     """
     new_num = 0
     byte_count = 0
     while num > 0:
-        byte_count += 1
-        new_num <<= 8
-        new_num |= (num & 0b1111111)
+        new_part = (num & 0b1111111)
         num >>= 7
         if num > 0:
-            new_num |= 0b1000_0000  # add continuation bit
+            new_part |= 0b1000_0000  # add continuation bit
+        new_num |= new_part << (8 * byte_count)
+        byte_count += 1
     return new_num.to_bytes(byte_count, sys.byteorder)
