@@ -7,6 +7,7 @@ import nltk
 import string
 
 from Types import *
+from typing import List, Set
 
 STEMMER = nltk.stem.porter.PorterStemmer()
 csv.field_size_limit(int(ct.c_ulong(-1).value // 2))  # found a fix from StackOverflow for field size too small
@@ -18,6 +19,11 @@ def make_doc_read_generator(in_file: str) -> TermInfoTupleGenerator:
     Call this function to make the generator first, then use next() to generate the next tuple.
     Yields (None, None, None, None) when done.
     """
+
+    # read the provided stop words file ONCE and keep stop words in memory
+    with open('stopwords.txt', 'r') as f:
+        stopwords = set(f.read().split())
+
     with open(in_file, mode='r', encoding='utf-8', newline='') as doc:
         doc_reader = csv.reader(doc)
         for i, row in enumerate(doc_reader):
@@ -25,13 +31,13 @@ def make_doc_read_generator(in_file: str) -> TermInfoTupleGenerator:
                 continue  # we skip the first row (headers)
             doc_id, title, content, date_posted, court = row
 
-            title_token, title_doc_length = zoneMarker(title,"title")
-            content_token, content_doc_length = zoneMarker(content,"content")
-            date_token, date_doc_length = zoneMarker(date_posted,"date")
-            court_token, court_doc_length = zoneMarker(court,"court")
+            title_tokens = tokenize(title, "title", stopwords)
+            content_tokens = tokenize(content, "content", stopwords)
+            date_tokens = tokenize(date_posted, "date", stopwords)
+            court_tokens = tokenize(court, "court", stopwords)
 
-            doc_length = title_doc_length + content_doc_length + date_doc_length + court_doc_length
-            tokens = title_token + content_token + date_token + court_token
+            tokens = title_tokens + content_tokens + date_tokens + court_tokens
+            doc_length = len(tokens)
 
             print("progress:", i)
 
@@ -42,36 +48,40 @@ def make_doc_read_generator(in_file: str) -> TermInfoTupleGenerator:
     yield None, None, None, None
 
 
-def tokenize(doc_text: str) -> list[str]:
+def tokenize(doc_text: str, zone: str, stop_words: Set[str]) -> List[str]:
     """
     Takes in document text and tokenizes.
     Also does post-tokenization cleaning like stemming.
+    :param doc_text: The text to be tokenized
+    :param zone: The zone the text is associated with
+    :param stop_words: The set of stop words to be used
+    :
     """
+    # case folding
+    doc_text = doc_text.lower()
 
-    #Read the provided stopwords file
-    with open('stopwords.txt', 'r') as f:
-        stopwords = set(f.read().split())
-
-
+    # tokenize and stem
     tokens = nltk.tokenize.word_tokenize(doc_text)
     tokens = [STEMMER.stem(tok) for tok in tokens]
+
+    # remove tokens that are purely punctuation
     def is_not_only_punct(tok): return any(char not in string.punctuation for char in tok)
-    # Remove stopwords from the tokens and add delimiter for zones
-    filtered_tokens = [word for word in tokens if word.lower() not in stopwords]
-    zone_tokens = [zone + '@' + token  for token in filtered_tokens]
-    return zone_tokens
+    tokens = [tok for tok in tokens if is_not_only_punct(tok)]
 
+    # remove stopwords from the tokens and add delimiter for zones
+    tokens = [word for word in tokens if word not in stop_words]
 
-def zoneMarker(data,zone):
-    data = data.lower()
-    tokens = tokenize(data,zone)
-    doc_length = len(tokens)
-    return tokens , doc_length
+    # each token will have the zone appended to the front using the @ symbol
+    # for example, "title@token", "content@token"
+    tokens = [zone + '@' + token for token in tokens]
+
+    return tokens
 
 
 def clean_operand(operand: str) -> str:
     """
     Case-folds and stems a single operand (token).
     For use in Parser, when parsing queries.
+    :param operand: The token to be case-folded and stemmed
     """
     return STEMMER.stem(operand.lower())
