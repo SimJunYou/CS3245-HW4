@@ -24,9 +24,15 @@ def make_doc_read_generator(in_file: str) -> TermInfoTupleGenerator:
             if i == 0:
                 continue  # we skip the first row (headers)
             doc_id, title, content, date_posted, court = row
-            content = content.lower()
-            tokens = tokenize(content)
-            doc_length = len(tokens)
+
+            title_token, title_doc_length = zoneMarker(title,"title")
+            content_token, content_doc_length = zoneMarker(content,"content")
+            date_token, date_doc_length = zoneMarker(date_posted,"date")
+            court_token, court_doc_length = zoneMarker(court,"court")
+
+            doc_length = title_doc_length + content_doc_length + date_doc_length + court_doc_length
+            tokens = title_token + content_token + date_token + court_token
+
             print("progress:", i)
 
             # for this assignment, we can assume that document names are integers without exception
@@ -41,11 +47,26 @@ def tokenize(doc_text: str) -> list[str]:
     Takes in document text and tokenizes.
     Also does post-tokenization cleaning like stemming.
     """
+
+    #Read the provided stopwords file
+    with open('stopwords.txt', 'r') as f:
+        stopwords = set(f.read().split())
+
+
     tokens = nltk.tokenize.word_tokenize(doc_text)
     tokens = [STEMMER.stem(tok) for tok in tokens]
     def is_not_only_punct(tok): return any(char not in string.punctuation for char in tok)
-    tokens = [tok for tok in tokens if is_not_only_punct(tok)]
-    return tokens
+    # Remove stopwords from the tokens and add delimiter for zones
+    filtered_tokens = [word for word in tokens if word.lower() not in stopwords]
+    zone_tokens = [zone + '@' + token  for token in filtered_tokens]
+    return zone_tokens
+
+
+def zoneMarker(data,zone):
+    data = data.lower()
+    tokens = tokenize(data,zone)
+    doc_length = len(tokens)
+    return tokens , doc_length
 
 
 def clean_operand(operand: str) -> str:
