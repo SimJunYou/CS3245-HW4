@@ -1,5 +1,5 @@
 import sys
-from typing import Dict, List, Mapping
+from typing import Dict, List
 from Types import *
 
 import pickle
@@ -255,15 +255,15 @@ def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
 
 def prepare_entry(doc_id: DocId, term_pos_list: List[TermPos]) -> List[int]:
     """
-    Performs delta encoding on the term positions list.
+    Performs gap encoding on the term positions list.
     Generates a list of integers following the following format:
-        (doc_id)(num_tp)(tp_1)(tp_2)(...)(tp_m)
+        `(doc_id)(num_tp)(tp_1)(tp_2)(...)(tp_m)`
     :param doc_id: The document ID
     :param term_pos_list: The list of associated term positions
     :return: List of integers in the specified format
     """
 
-    def delta_encode(lst: List[int]) -> List[int]:
+    def gap_encode(lst: List[int]) -> List[int]:
         encoded = []
         prev = 0
         for curr in lst:
@@ -271,7 +271,7 @@ def prepare_entry(doc_id: DocId, term_pos_list: List[TermPos]) -> List[int]:
             prev = curr
         return encoded
 
-    term_pos_list = delta_encode(term_pos_list)
+    term_pos_list = gap_encode(term_pos_list)
     header = [doc_id, len(term_pos_list)]
 
     # we add in the number of term pos entries, so we know how long the list is
