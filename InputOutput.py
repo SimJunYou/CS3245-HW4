@@ -165,8 +165,6 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
 
     with open(out_postings, "wb") as postings_fp:
         for term, posting_list in dictionary.items():
-            if term == "content@sim":
-                print(term, posting_list)
             posting_list_serialized: bytes
             posting_list_serialized = serialize_posting(posting_list, write_skips)
 
