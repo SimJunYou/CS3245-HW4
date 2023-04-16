@@ -5,6 +5,7 @@ import json
 
 from typing import *
 
+
 def calc_centroid(relevant_docs_term_weights, in_query_relevant_docs):
     centroid = {}
     for relevant_doc_id in in_query_relevant_docs:
@@ -18,9 +19,24 @@ def calc_centroid(relevant_docs_term_weights, in_query_relevant_docs):
 
     return centroid
 
-def run_rocchio(config, relevant_docs_term_weights,in_query_relevant_docs,query_vector):
-    
-    centroid = calc_centroid(relevant_docs_term_weights, in_query_relevant_docs)
+
+# For this method, need to implement this in indexing
+# Require top 10 tf-idf weights (corresponding to each term) for each doc id
+
+# Derived from doc lengths
+# Pseudo-code
+
+# for every doc id in doc length
+#  for every term in posting list
+#     if doc id in postings dict[term]
+#        calc tf-idf with normalisation
+#        maintain a list of all these tf-idfs
+# Get top 10 tf-idf weight in the form of list [term:tf-idf....]
+# Store in as dictionary of doc id (key) : above list (value)
+def run_rocchio(config, relevant_docs_term_weights, in_query_relevant_docs, query_vector):
+
+    centroid = calc_centroid(
+        relevant_docs_term_weights, in_query_relevant_docs)
 
     for term, _ in centroid.items():
         beta = config['beta']
@@ -32,7 +48,8 @@ def run_rocchio(config, relevant_docs_term_weights,in_query_relevant_docs,query_
         query_vector[term] = modified_centroid_score
     return query_vector
 
-def run_search(dict_file: str, postings_file: str, queries_file: str, 
+
+def run_search(dict_file: str, postings_file: str, queries_file: str,
                results_file: str, thesaurus_file: str):
     """
     using the given dictionary file, postings file, and optionally thesaurus pickle file,
@@ -51,8 +68,9 @@ def run_search(dict_file: str, postings_file: str, queries_file: str,
             thesaurus = pickle.load(f)
         # TODO: change hardcoded value to query_tokens
         query_tokens = expand_query(["plaintiff"], thesaurus)
-    
+
     print(query_tokens)
+
 
 def expand_query(tokens: List[str], thesaurus: Dict[str, List[str]] = {}):
     """
@@ -63,6 +81,7 @@ def expand_query(tokens: List[str], thesaurus: Dict[str, List[str]] = {}):
         result.append(token)
         result += thesaurus.get(token, [])
     return result
+
 
 # python3 search.py -d dictionary.txt -p postings.txt -q queries/q1.txt -o results.txt -t thesaurus.pickle
 if __name__ == '__main__':
