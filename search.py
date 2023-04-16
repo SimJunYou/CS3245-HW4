@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-import sys
 import pickle
 import argparse
 
@@ -13,11 +12,16 @@ def run_search(dict_file: str, postings_file: str, queries_file: str,
     """
     print("running search on the queries...")
 
-    query_tokens = []        
+    # TODO: read query from file
+    query_tokens = []
+
+    # Expand query if a thesaurus is provided
     if thesaurus_file:
         with open(thesaurus_file, "rb") as f:
             thesaurus = pickle.load(f)
+        # TODO: change hardcoded value to query_tokens
         query_tokens = expand_query(["plaintiff"], thesaurus)
+    
     print(query_tokens)
 
 def expand_query(tokens: List[str], thesaurus: Dict[str, List[str]] = {}):
@@ -30,6 +34,7 @@ def expand_query(tokens: List[str], thesaurus: Dict[str, List[str]] = {}):
         result += thesaurus.get(token, [])
     return result
 
+# python3 search.py -d dictionary.txt -p postings.txt -q queries/q1.txt -o results.txt -t thesaurus.pickle
 if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('-d', dest='dictionary_file', required=True)
