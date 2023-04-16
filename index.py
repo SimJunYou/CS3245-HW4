@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import getopt
 import sys
-import time
 from math import log10
-from typing import Dict
+from typing import Dict, List
 
 # SELF-WRITTEN MODULES
 from InputOutput import write_block
@@ -19,11 +18,10 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
     then output the dictionary file and postings file
     """
     print("indexing...")
-    start = time.time()
 
     # we have a main dictionary mapping term and doc ID to term frequency
     # this is "main" because it directly mirrors the structure of our posting lists
-    dictionary: Dict[Term, Dict[DocId, TermFreq]] = dict()
+    dictionary: Dict[Term, Dict[DocId, List[TermPos]]] = dict()
 
     # we want to capture all document IDs and each document's length
     # we can do that using a dictionary mapping doc_id to doc_length
@@ -40,17 +38,18 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
         generated = next(term_info_generator)
 
         # if we have run out of terms, we stop building index
-        if generated is None:
+        has_no_more_terms = all([x is None for x in generated])
+        if has_no_more_terms:
             # we have one last document's length to calculate!
             # calc length and save to old doc's ID in docs_len_dct
             doc_length = 0
             for count in term_freq_counter.values():
                 doc_length += (1 + log10(count)) ** 2
-            docs_len_dct[current_doc] = doc_length**0.5
+            docs_len_dct[current_doc] = doc_length ** 0.5
             break
 
         # otherwise, we proceed as normal!
-        term, doc_length, doc_id = generated
+        term, term_pos, doc_length, doc_id = generated
 
         # if we encounter a new document, update docs_len_dct with the calculated doc length and reset term_freq_counter
         if current_doc != doc_id:
@@ -58,7 +57,8 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
             doc_length = 0
             for count in term_freq_counter.values():
                 doc_length += (1 + log10(count)) ** 2
-            docs_len_dct[current_doc] = doc_length**0.5
+            if current_doc is not None:
+                docs_len_dct[current_doc] = doc_length ** 0.5
             # then, reset counter and update current_doc
             current_doc = doc_id
             term_freq_counter = dict()
@@ -75,17 +75,15 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
             # one posting_list is held for each term
             posting_list = dictionary[term]
             if doc_id in posting_list:
-                dictionary[term][doc_id] += 1
+                dictionary[term][doc_id] += [term_pos]
             else:
-                dictionary[term][doc_id] = 1
+                dictionary[term][doc_id] = [term_pos]
         else:
-            dictionary[term] = {doc_id: 1}
+            dictionary[term] = {doc_id: [term_pos]}
 
     # we write the final posting list and dictionary to disk
     # since we have no more intersects, we will not use skip pointers anymore
-    write_block(dictionary, out_dict, out_postings, docs_len_dct, write_skips=False)
-
-    print(time.time() - start)
+    write_block(dictionary, docs_len_dct, out_dict, out_postings, write_skips=False)
 
 
 def usage():
@@ -115,9 +113,9 @@ for o, a in opts:
         assert False, "unhandled option"
 
 if (
-    input_directory is None
-    or output_file_postings is None
-    or output_file_dictionary is None
+        input_directory is None
+        or output_file_postings is None
+        or output_file_dictionary is None
 ):
     usage()
     sys.exit(2)
