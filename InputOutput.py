@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 from typing import Dict, List
 from Types import *
@@ -23,6 +25,7 @@ class PostingReader:
         self._filename: str = file
         self._dct: Dict[Term, int] = dct  # Term -> pointer
         self._loc: int = 0
+        self._contains_pos: bool = False  # whether file contains pos. indices (set in __enter__ method)
         self._done: bool = False       # flag for completing the reading of the given posting list
         self._remaining_docs: int = 0  # keeps count of remaining docs in current posting list
         self._remaining_pos: int = 0   # keeps count of remaining term positions left in current doc
@@ -47,16 +50,23 @@ class PostingReader:
 
         # get document frequency and update remaining count
         doc_freq = self.read_next_int()
-        self._remaining_docs = doc_freq - 1  # count will be 0 when we are on the last document
+        if self._contains_pos:
+            # reading works slightly differently if the file contains pos. indices
+            # we immediately read the first doc ID, so we start with -1 from remaining docs
+            self._remaining_docs = doc_freq - 1
 
-        # get current document ID and update
-        curr_doc = self.read_next_int()
-        self._current_doc = curr_doc
+            # get current document ID and update
+            curr_doc = self.read_next_int()
+            self._current_doc = curr_doc
 
-        # get term pos count for current doc and update remaining count
-        term_pos_num = self.read_next_int()
-        self._remaining_pos = term_pos_num  # this is for internal use (changes)
-        self._term_freq = term_pos_num  # this is for data (does not change)
+            # get term pos count for current doc and update remaining count
+            term_pos_num = self.read_next_int()
+            self._remaining_pos = term_pos_num  # this is for internal use (changes)
+            self._term_freq = term_pos_num  # this is for data (does not change)
+        else:
+            # if the file does not contain pos. indices, we do not read immediately when seeking
+            # so, we do not start with -1 from remaining docs
+            self._remaining_docs = doc_freq
 
         # in our implementation, we save location after reading and re-seek each time
         self._loc = self._f.tell()
@@ -81,7 +91,41 @@ class PostingReader:
                 break
         return collected_int
 
-    def read_entry(self) -> Tuple[DocId, TermFreq, TermPos]:
+    def read_entry(self) -> Tuple[DocId, TermFreq] | Tuple[DocId, TermFreq, TermPos]:
+        """
+        Using the current position of the instance's file pointer,
+        read the next entry in the posting list and return it as a tuple:
+        >> (doc_id, term_freq, term_pos) [if the file contains pos. indices]
+        >> (doc_id, term_freq)           [otherwise]
+        :return: Tuple of document ID, term frequency, and optionally term position
+        """
+        if self._contains_pos:
+            return self._read_entry_with_pos()
+        else:
+            return self._read_entry_without_pos()
+
+    def _read_entry_without_pos(self) -> Tuple[DocId, TermFreq]:
+        """
+        Using the current position of the instance's file pointer,
+        read the next entry in the posting list and return it as a tuple:
+        >> (doc_id, term_freq)
+        :return: Tuple of document ID, term frequency
+        """
+        # throw error if we're trying to read a completely read posting list
+        assert not self._done, "Reading of posting list is already complete!"
+
+        self._f.seek(self._loc, 0)
+        if self._remaining_docs > 0:
+            self._remaining_docs -= 1
+            if self._remaining_docs == 0:
+                self._done = True
+            self._current_doc = self.read_next_int()
+            self._term_freq = self.read_next_int()
+
+        self._loc = self._f.tell()  # update position
+        return self._current_doc, self._term_freq
+
+    def _read_entry_with_pos(self) -> Tuple[DocId, TermFreq, TermPos]:
         """
         Using the current position of the instance's file pointer,
         read the next entry in the posting list and return it as a tuple:
@@ -100,10 +144,11 @@ class PostingReader:
             self._remaining_docs -= 1
             # read the headers -> (doc_id)(num_tp), then read the first term pos
             self._current_doc = self.read_next_int()
-            self._remaining_pos = self.read_next_int() - 1  # we will read one term pos, so -1
+            self._term_freq = self.read_next_int()
+            self._remaining_pos = self._term_freq - 1  # we will read one term pos, so -1
             self._curr_pos = self.read_next_int()  # reset term pos at each document
 
-        if self._remaining_pos == 0 and self._remaining_docs == 0:
+        if self._remaining_pos <= 0 and self._remaining_docs <= 0:
             self._done = True
 
         self._loc = self._f.tell()  # update position
@@ -112,8 +157,24 @@ class PostingReader:
     def is_done(self):
         return self._done
 
+    def get_stats(self):
+        print("file name:\t", self._filename,
+              "\nfile ptr:\t", self._loc,
+              "\nhas pos:\t", self._contains_pos,
+              "\nis done:\t", self._done,
+              "\nrem docs:\t", self._remaining_docs,
+              "\nrem pos:\t", self._remaining_pos,
+              "\nterm freq:\t", self._term_freq,
+              "\ncurr doc:\t", self._current_doc,
+              "\ncurr pos:\t", self._curr_pos)
+
     def __enter__(self):
+        """
+        Upon initialization, read the header to figure out whether the postings list file contains positional indices.
+        """
         self._f = open(self._filename, "rb")
+        header = self._f.read(1)
+        self._contains_pos = (header == b"\xFF")
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -137,12 +198,13 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
                 docs_len_dct: Dict[DocId, DocLength],
                 out_dict: str,
                 out_postings: str,
-                write_skips: bool = False) -> None:
+                out_lengths: str,
+                write_pos: bool = False) -> None:
     """
     For each (term, posting list) pair in the dictionary...
 
-    Each posting list is in the following format: [Dict[doc_id -> term_freq], doc_length]
-    We extract the Dict and pass it to serialize_posting, which returns a string.
+    Each posting list is in the following format: [Dict[doc_id -> [term_pos1, ...]], doc_length]
+    We extract the Dict and pass it to serialize_posting, which returns a bytearray.
     The serialized posting list is written into the postings file.
     We count the number of characters written so far as cumulative_ptr.
 
@@ -157,16 +219,24 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
     :param docs_len_dct: The dictionary containing the length of documents
     :param out_dict: The desired name of the output dictionary file
     :param out_postings: The desired name of the output postings file
-    :param write_skips: Whether to write skip pointers into the postings file
+    :param out_lengths: The desired name of the output lengths file
+    :param write_pos: Whether to write positional indices into the postings file
     :return: None
     """
     final_dict = dict()
-    cumulative_ptr = 0
 
     with open(out_postings, "wb") as postings_fp:
+        if write_pos:  # write postings file header
+            postings_fp.write(b"\xFF")
+        else:
+            postings_fp.write(b"\x00")
+        cumulative_ptr = 1  # we have already written 1 byte for the header
+
         for term, posting_list in dictionary.items():
+            if term == "content@permit":
+                print(posting_list)
             posting_list_serialized: bytes
-            posting_list_serialized = serialize_posting(posting_list, write_skips)
+            posting_list_serialized = serialize_posting(posting_list, write_pos)
 
             # cumulative_ptr stores the number of bytes from the start of the file to the current entry
             # this lets us seek directly to the entry of the term we want
@@ -175,26 +245,26 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
             postings_fp.write(posting_list_serialized)
 
     pickle.dump(final_dict, open(out_dict, "wb"))
-    pickle.dump(
-        docs_len_dct, open("lengths.txt", "wb")
-    )  # FIXME: Don't hardcode file name?
+    pickle.dump(docs_len_dct, open(out_lengths, "wb"))
 
     print(f"Wrote {len(dictionary)} terms into final files")
 
 
 def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
-                      write_skips: bool) -> bytes:
+                      write_pos: bool) -> bytes:
     """
     Turns a posting list into a bytearray, and returns the bytearray.
     The byte format is:
         (doc_freq)[doc_1][doc_2][...][doc_n]
-    Each [doc_x] above is short for the following:
-        (doc_id)(num_tp)(tp_1)(tp_2)(...)(tp_m)
+    If term positions are to be stored, each [doc_x] above is short for the following:
+        (doc_id)(term_freq)(tp_1)(tp_2)(...)(tp_m)
+    Otherwise, each [doc_x] above is for the following:
+        (doc_id)(term_freq)
     All items in the byte format, when fully expanded, are integers encoded using variable byte encoding.
-    The term positions are encoded using delta encoding (before variable byte encoding).
+    The term positions are encoded using gap encoding (before variable byte encoding).
     Delimiters are unnecessary as we encode the exact number of entries to expect.
     :param posting_list: The posting list to be serialized
-    :param write_skips: Whether to write skip pointers into the postings file serialization (NOT IN USE)
+    :param write_pos: Whether to write positional indices into the postings file serialization
     :returns: Bytearray representing the serialized posting list
     """
 
@@ -210,7 +280,13 @@ def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
     # we flatten that to get our final list of integers
     def flatten(arr): return list(chain.from_iterable(arr))
     prepared_entries: List[int]
-    prepared_entries = flatten([prepare_entry(doc_id, term_pos_list) for doc_id, term_pos_list in posting_list])
+
+    if write_pos:
+        nested_entries = [prepare_entry(doc_id, term_pos_list) for doc_id, term_pos_list in posting_list]
+    else:
+        nested_entries = [(doc_id, len(term_pos_list)) for doc_id, term_pos_list in posting_list]
+        nested_entries = sorted(nested_entries, key=lambda x: -x[1])
+    prepared_entries = flatten(nested_entries)
 
     # add in the header as described in the docstring
     header = [doc_freq]
@@ -219,36 +295,6 @@ def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
     # variable-byte encode everything in the list of final entries, then return the bytearray
     serialized_list = map(variable_byte_encode, final_entries)
     return b"".join(serialized_list)  # flatten (using different method for an iterable of bytearrays)
-
-    # # posting list should have at least 4 elements for skip pointers to be efficient
-    # if write_skips and len(posting_list) >= 4:
-    #     # calculate the last index which should contain a skip
-    #     size = len(posting_list)
-    #     skip_interval = floor(sqrt(size))
-    #     last_skip = (size - 1) - skip_interval
-    #     last_skip = last_skip - (last_skip % skip_interval)
-    # else:
-    #     # setting these to these values will stop skip pointers from being added
-    #     last_skip = -1
-    #     skip_interval = 1
-    #
-    # # since our skip pointers encode the number of characters to the next item with skip,
-    # # we build the serialization from back to front, so we can count the number of
-    # # characters between a later skip and an earlier skip more easily
-    #
-    # # if last_skip or skip_interval are set to 0, then skip pointers will not be added
-    #
-    # prev_skip_len = len(posting_list[-1])
-    # for i, item in list(enumerate(posting_list))[::-1]:
-    #     if i <= last_skip and i % skip_interval == 0:  # if current item has skip,
-    #         output = f"{item}^{len(output) - prev_skip_len}," + output
-    #         prev_skip_len += len(output) - prev_skip_len
-    #     else:
-    #         output = f"{item}," + output
-    #     output = output[:-1] + "|"  # finally, replace ending comma with |
-    #
-    # output = f"{str(len(posting_list))}${output}"  # add in doc freq
-    # return output
 
 
 def prepare_entry(doc_id: DocId, term_pos_list: List[TermPos]) -> List[int]:
@@ -261,19 +307,25 @@ def prepare_entry(doc_id: DocId, term_pos_list: List[TermPos]) -> List[int]:
     :return: List of integers in the specified format
     """
 
-    def gap_encode(lst: List[int]) -> List[int]:
-        encoded = []
-        prev = 0
-        for curr in lst:
-            encoded.append(curr - prev)
-            prev = curr
-        return encoded
-
     term_pos_list = gap_encode(term_pos_list)
     header = [doc_id, len(term_pos_list)]
 
     # we add in the number of term pos entries, so we know how long the list is
     return header + term_pos_list
+
+
+def gap_encode(lst: List[int]) -> List[int]:
+    """
+    Perform gap encoding on the input list and return the encoded list as output.
+    :param lst: The list to be gap encoded
+    :return: The gap encoded list
+    """
+    encoded = []
+    prev = 0
+    for curr in lst:
+        encoded.append(curr - prev)
+        prev = curr
+    return encoded
 
 
 def variable_byte_encode(num: int) -> bytes:
