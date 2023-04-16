@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 import sys
-import getopt
 import pickle
+import argparse
 
 from typing import *
 
@@ -9,19 +9,27 @@ def usage():
     print(
         "usage: "
         + sys.argv[0]
-        + " -d dictionary-file -p postings-file -q file-of-queries -o output-file-of-results"
+        + " -d dictionary-file -p postings-file -q file-of-queries -o output-file-of-results -t thesaurus-pickle-file"
     )
 
-def run_search(dict_file: str, postings_file: str, queries_file: str, results_file: str, thesaurus_file: str = ""):
+def run_search(dict_file: str, postings_file: str, queries_file: str, results_file: str, thesaurus_file: str):
     """
     using the given dictionary file, postings file, and optionally thesaurus pickle file,
     perform searching on the given queries file and output the results to a file
     """
     print("running search on the queries...")
 
-def expand_query(tokens: List[str]):
-    with open("thesaurus.pickle", "rb") as f:
-        thesaurus = pickle.load(f)
+    query_tokens = []        
+    if thesaurus_file:
+        with open(thesaurus_file, "rb") as f:
+            thesaurus = pickle.load(f)
+        query_tokens = expand_query(["plaintiff"], thesaurus)
+    print(query_tokens)
+
+def expand_query(tokens: List[str], thesaurus: Dict[str, List[str]] = {}):
+    """
+    Expands a query token to include related terms.
+    """
     result = []
     for token in tokens:
         result.append(token)
@@ -29,23 +37,18 @@ def expand_query(tokens: List[str]):
     return result
 
 if __name__ == '__main__':
-    try:
-        opts, args = getopt.getopt(sys.argv[1:], "d:p:q:o:")
-    except getopt.GetoptError:
-        usage()
-        sys.exit(2)
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('-d', dest='dictionary_file', 
+                            help='Path to the dictionary', required=True)
+    arg_parser.add_argument('-p', dest='postings_file', 
+                            help='Path to postings file', required=True)
+    arg_parser.add_argument('-q', dest='file_of_queries', 
+                            help='Path to queries file', required=True)
+    arg_parser.add_argument('-o', dest='file_of_output', 
+                            help='Path to output file', required=True)
+    arg_parser.add_argument('-t', dest='thesaurus_file', 
+                            help='(Optional) Path to thesaurus pickle file')
+    args = arg_parser.parse_args()
 
-    for o, a in opts:
-        if o == "-d":
-            dictionary_file = a
-        elif o == "-p":
-            postings_file = a
-        elif o == "-q":
-            file_of_queries = a
-        elif o == "-o":
-            file_of_output = a
-        else:
-            assert False, "unhandled option"
-
-    # run_search(dictionary_file, postings_file, file_of_queries, file_of_output)
-    print(expand_query(["plaintiff"]))
+    run_search(args.dictionary_file, args.postings_file, args.file_of_queries,
+               args.file_of_output, args.thesaurus_file)
