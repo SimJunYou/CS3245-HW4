@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import sys
 import getopt
+import pickle
 
 from typing import *
 
@@ -11,16 +12,16 @@ def usage():
         + " -d dictionary-file -p postings-file -q file-of-queries -o output-file-of-results"
     )
 
-def run_search(dict_file: str, postings_file: str, queries_file: str, results_file: str):
+def run_search(dict_file: str, postings_file: str, queries_file: str, results_file: str, thesaurus_file: str = ""):
     """
-    using the given dictionary file and postings file,
+    using the given dictionary file, postings file, and optionally thesaurus pickle file,
     perform searching on the given queries file and output the results to a file
     """
     print("running search on the queries...")
 
 def expand_query(tokens: List[str]):
-    with open("thesaurus.txt", "r") as f:
-        thesaurus = eval(f.read())
+    with open("thesaurus.pickle", "rb") as f:
+        thesaurus = pickle.load(f)
     result = []
     for token in tokens:
         result.append(token)
