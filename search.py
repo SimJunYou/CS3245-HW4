@@ -1,8 +1,36 @@
 #!/usr/bin/python3
 import pickle
 import argparse
+import json
 
 from typing import *
+
+def calc_centroid(relevant_docs_term_weights, in_query_relevant_docs):
+    centroid = {}
+    for relevant_doc_id in in_query_relevant_docs:
+        term_weights = relevant_docs_term_weights[relevant_doc_id]
+
+        for (term, weight) in term_weights:
+            centroid[term] = centroid.get(term, 0) + weight
+
+    for term, _ in centroid.items():
+        centroid[term] /= len(in_query_relevant_docs)
+
+    return centroid
+
+def run_rocchio(config, relevant_docs_term_weights,in_query_relevant_docs,query_vector):
+    
+    centroid = calc_centroid(relevant_docs_term_weights, in_query_relevant_docs)
+
+    for term, _ in centroid.items():
+        beta = config['beta']
+        alpha = config['alpha']
+        if term not in query_vector:
+            modified_centroid_score = centroid[term] * beta
+        else:
+            modified_centroid_score = alpha * query_vector[term] + beta * query_vector[term]
+        query_vector[term] = modified_centroid_score
+    return query_vector
 
 def run_search(dict_file: str, postings_file: str, queries_file: str, 
                results_file: str, thesaurus_file: str):
@@ -11,6 +39,8 @@ def run_search(dict_file: str, postings_file: str, queries_file: str,
     perform searching on the given queries file and output the results to a file
     """
     print("running search on the queries...")
+    with open("config.json", "r") as f:
+        config = json.load(f)
 
     # TODO: read query from file
     query_tokens = []
