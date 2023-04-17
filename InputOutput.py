@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from Types import *
 
 import pickle
@@ -29,16 +29,16 @@ class PostingReader:
         self._done: bool = False       # flag for completing the reading of the given posting list
         self._remaining_docs: int = 0  # keeps count of remaining docs in current posting list
         self._remaining_pos: int = 0   # keeps count of remaining term positions left in current doc
+        self._doc_freq: DocFreq = 0    # records document frequency
         self._term_freq: TermFreq = 0  # records term frequency of current doc:term pair
         self._current_doc: DocId = 0   # records the id of the current doc
         self._curr_pos: TermPos = 0    # records the current term position (to undo gap encoding)
 
-    def seek_term(self, term: str) -> DocFreq:
+    def seek_term(self, term: str) -> None:
         """
         To be used right after entering the context manager!
         Seeks file to the desired term and returns the document frequency.
         :param term: The desired term
-        :return: The document frequency
         """
 
         # we should be checking that terms are in dictionary in process_query
@@ -49,11 +49,11 @@ class PostingReader:
         self._f.seek(self._dct[term], 0)
 
         # get document frequency and update remaining count
-        doc_freq = self.read_next_int()
+        self._doc_freq = self.read_next_int()
         if self._contains_pos:
             # reading works slightly differently if the file contains pos. indices
             # we immediately read the first doc ID, so we start with -1 from remaining docs
-            self._remaining_docs = doc_freq - 1
+            self._remaining_docs = self._doc_freq - 1
 
             # get current document ID and update
             curr_doc = self.read_next_int()
@@ -66,12 +66,10 @@ class PostingReader:
         else:
             # if the file does not contain pos. indices, we do not read immediately when seeking
             # so, we do not start with -1 from remaining docs
-            self._remaining_docs = doc_freq
+            self._remaining_docs = self._doc_freq
 
         # in our implementation, we save location after reading and re-seek each time
         self._loc = self._f.tell()
-
-        return doc_freq
 
     def read_next_int(self) -> int:
         """
@@ -157,6 +155,9 @@ class PostingReader:
     def is_done(self):
         return self._done
 
+    def get_doc_freq(self):
+        return self._doc_freq
+
     def get_stats(self):
         print("file name:\t", self._filename,
               "\nfile ptr:\t", self._loc,
@@ -196,9 +197,11 @@ def unpickle_file(filename):
 
 def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
                 docs_len_dct: Dict[DocId, DocLength],
+                top_K_terms_dct: Dict[DocId, List[Tuple[Term, TermWeight]]],
                 out_dict: str,
                 out_postings: str,
                 out_lengths: str,
+                out_champion: str,
                 write_pos: bool = False) -> None:
     """
     For each (term, posting list) pair in the dictionary...
@@ -217,9 +220,11 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
     The (final_dict, docs_len_dct) tuple is written into the dictionary file using pickle.
     :param dictionary: The dictionary of terms to posting lists
     :param docs_len_dct: The dictionary containing the length of documents
+    :param top_K_terms_dct: The dictionary containing the top K terms for each document
     :param out_dict: The desired name of the output dictionary file
     :param out_postings: The desired name of the output postings file
     :param out_lengths: The desired name of the output lengths file
+    :param out_champion: The desired name of the output champions file
     :param write_pos: Whether to write positional indices into the postings file
     :return: None
     """
@@ -233,8 +238,6 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
         cumulative_ptr = 1  # we have already written 1 byte for the header
 
         for term, posting_list in dictionary.items():
-            if term == "content@permit":
-                print(posting_list)
             posting_list_serialized: bytes
             posting_list_serialized = serialize_posting(posting_list, write_pos)
 
@@ -246,6 +249,7 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
 
     pickle.dump(final_dict, open(out_dict, "wb"))
     pickle.dump(docs_len_dct, open(out_lengths, "wb"))
+    pickle.dump(top_K_terms_dct, open(out_champion, "wb"))
 
     print(f"Wrote {len(dictionary)} terms into final files")
 

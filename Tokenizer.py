@@ -80,7 +80,7 @@ def tokenize(doc_text: str, zone: str, stop_words: Set[str]) -> List[str]:
     return tokens
 
 
-def clean_operand(operand: str) -> str:
+def clean_query_token(operand: str) -> str:
     """
     Case-folds and stems a single operand (token).
     For use in Parser, when parsing queries.
@@ -88,3 +88,14 @@ def clean_operand(operand: str) -> str:
     :return: Case-folded and stemmed token
     """
     return STEMMER.stem(operand.lower())
+
+
+def tokenize_query(query: str) -> List[str]:
+    """
+    Takes in a string and performs tokenization, stemming and case-folding
+
+    :param line: the string to process
+    :return: a list of processed tokens
+    """
+    tokens = nltk.word_tokenize(query)
+    return [STEMMER.stem(token.strip().casefold()) for token in tokens]
