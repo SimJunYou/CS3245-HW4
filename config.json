@@ -1,8 +1,19 @@
 {
     "rocchio": {
-        "rocchio_on": true,
-        "alpha": 1,
+        "alpha": 1.0,
         "beta": 0.75,
         "gamma": 0.2
-    }
+    },
+    "champion_list": {
+        "K": 10
+    },
+    "file_names": {
+        "thesaurus": "stemmed_thesaurus.pickle",
+        "lengths": "lengths.txt",
+        "champion": "champion.txt",
+        "stop_words": "stopwords.txt"
+    },
+    "write_pos_indices": true,
+    "run_query_expansion": true,
+    "run_rocchio": true
 }
