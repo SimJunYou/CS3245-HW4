@@ -2,6 +2,10 @@
 /queries
 /.idea
 *.pdf
+dictionary.txt
+lengths.txt
+postings.txt
+champion.txt
 Notes about Court Hierarchy.txt
 .vscode
 __pycache__
