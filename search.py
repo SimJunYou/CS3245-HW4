@@ -52,15 +52,21 @@ def run_rocchio(config, relevant_docs_term_weights, in_query_relevant_docs, quer
 def run_search(dict_file: str, postings_file: str, queries_file: str,
                results_file: str, thesaurus_file: str):
     """
-    using the given dictionary file, postings file, and optionally thesaurus pickle file,
-    perform searching on the given queries file and output the results to a file
+    using the given dictionary file, postings file, and optionally 
+    thesaurus pickle file, perform searching on the given queries 
+    file and output the results to the results file
     """
     print("running search on the queries...")
     with open("config.json", "r") as f:
         config = json.load(f)
 
-    # TODO: read query from file
     query_tokens = []
+    relevant_docs = []
+    with open(queries_file, "r") as qf:
+        query = qf.readline()
+        query_tokens += process_query(query)
+        while relevant_doc := qf.readline().strip():
+            relevant_docs.append(relevant_doc)
 
     # Expand query if a thesaurus is provided
     if thesaurus_file:
@@ -70,7 +76,6 @@ def run_search(dict_file: str, postings_file: str, queries_file: str,
         query_tokens = expand_query(["plaintiff"], thesaurus)
 
     print(query_tokens)
-
 
 def expand_query(tokens: List[str], thesaurus: Dict[str, List[str]] = {}):
     """
