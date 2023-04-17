@@ -88,3 +88,14 @@ def clean_operand(operand: str) -> str:
     :return: Case-folded and stemmed token
     """
     return STEMMER.stem(operand.lower())
+
+def process_query(query: str) -> List[str]:
+    """
+    Takes in a string and performs tokenization, stemming and case-folding
+
+    :param line: the string to process
+    :return: a list of processed tokens
+    """
+    stemmer = nltk.stem.porter.PorterStemmer()
+    tokens = nltk.word_tokenize(query)
+    return [stemmer.stem(token.strip().casefold()) for token in tokens]

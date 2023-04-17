@@ -4,7 +4,7 @@ import argparse
 import json
 
 from typing import *
-
+from Tokenizer import process_query
 
 def calc_centroid(relevant_docs_term_weights, in_query_relevant_docs):
     centroid = {}
@@ -72,8 +72,7 @@ def run_search(dict_file: str, postings_file: str, queries_file: str,
     if thesaurus_file:
         with open(thesaurus_file, "rb") as f:
             thesaurus = pickle.load(f)
-        # TODO: change hardcoded value to query_tokens
-        query_tokens = expand_query(["plaintiff"], thesaurus)
+        query_tokens = expand_query(query_tokens, thesaurus)
 
     print(query_tokens)
 
