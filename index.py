@@ -11,6 +11,7 @@ from typing import Dict, List, Tuple
 from InputOutput import write_block
 from Tokenizer import make_doc_read_generator
 from Types import *
+import Config
 
 
 def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
@@ -19,15 +20,6 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
     then output the dictionary file and postings file
     """
     print("indexing...")
-
-    # read important constants from config
-    with open("config.json", "r") as cf:
-        config = json.load(cf)
-        K = config["champion_list"]["K"]
-        OUT_LENGTHS = config["file_names"]["lengths"]
-        OUT_CHAMPION = config["file_names"]["champion"]
-        STOP_WORDS_FILE = config["file_names"]["stop_words"]
-        WRITE_POS = config["write_pos_indices"]
 
     # we have a main dictionary mapping term and doc ID to term frequency
     # this is "main" because it directly mirrors the structure of our posting lists
@@ -43,7 +35,7 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
     current_doc: Optional[DocId] = None
 
     # we use a generator to easily get the next term and relevant information from the given input dataset
-    term_info_generator: TermInfoTupleGenerator = make_doc_read_generator(in_file, STOP_WORDS_FILE)
+    term_info_generator: TermInfoTupleGenerator = make_doc_read_generator(in_file, Config.STOP_WORDS_FILE)
     while True:
         generated = next(term_info_generator)
 
@@ -93,13 +85,13 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
 
     # CALCULATE TOP K SIGNIFICANT TERMS FOR EACH DOCUMENT
     N = len(docs_len_dct)  # total number of docs
-    
+
+    top_K_terms_dct: Dict[DocId, List[Tuple[Term, TermWeight]]] = {}
     for doc_id in docs_len_dct:
-        top_K_terms_dct: Dict[DocId, List[Tuple[Term, TermWeight]]] = {}
         term_weight_list: List[Tuple[Term, TermWeight]] = []
         for term in dictionary:  
             if doc_id in dictionary[term]:
-                if WRITE_POS:
+                if Config.WRITE_POS:
                     term_freq = len(dictionary[term][doc_id])
                 else:
                     term_freq = dictionary[term][doc_id]
@@ -108,7 +100,7 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
                 term_weight /= docs_len_dct[doc_id]  # normalization
                 term_weight_list.append((term, term_weight))
         # sort by descending weights and keep top K
-        term_weight_list = sorted(term_weight_list, key=lambda x:-x[1])[:K]
+        term_weight_list = sorted(term_weight_list, key=lambda x: -x[1])[:Config.K]
         top_K_terms_dct[doc_id] = term_weight_list
 
     # we write the final posting list and dictionary to disk
@@ -118,9 +110,9 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
                 top_K_terms_dct,
                 out_dict,
                 out_postings,
-                OUT_LENGTHS,
-                OUT_CHAMPION,
-                WRITE_POS)
+                Config.OUT_LENGTHS,
+                Config.OUT_CHAMPION,
+                Config.WRITE_POS)
 
 
 def usage():

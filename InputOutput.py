@@ -158,6 +158,9 @@ class PostingReader:
     def get_doc_freq(self):
         return self._doc_freq
 
+    def has_pos(self):
+        return self._contains_pos
+
     def get_stats(self):
         print("file name:\t", self._filename,
               "\nfile ptr:\t", self._loc,
@@ -197,7 +200,7 @@ def unpickle_file(filename):
 
 def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
                 docs_len_dct: Dict[DocId, DocLength],
-                top_K_terms_dct: Dict[DocId, List[Tuple[Term, TermWeight]]],
+                champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]],
                 out_dict: str,
                 out_postings: str,
                 out_lengths: str,
@@ -220,7 +223,7 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
     The (final_dict, docs_len_dct) tuple is written into the dictionary file using pickle.
     :param dictionary: The dictionary of terms to posting lists
     :param docs_len_dct: The dictionary containing the length of documents
-    :param top_K_terms_dct: The dictionary containing the top K terms for each document
+    :param champion_dct: The dictionary containing the top K terms for each document
     :param out_dict: The desired name of the output dictionary file
     :param out_postings: The desired name of the output postings file
     :param out_lengths: The desired name of the output lengths file
@@ -249,7 +252,7 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
 
     pickle.dump(final_dict, open(out_dict, "wb"))
     pickle.dump(docs_len_dct, open(out_lengths, "wb"))
-    pickle.dump(top_K_terms_dct, open(out_champion, "wb"))
+    pickle.dump(champion_dct, open(out_champion, "wb"))
 
     print(f"Wrote {len(dictionary)} terms into final files")
 

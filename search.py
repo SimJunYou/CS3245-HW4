@@ -4,8 +4,10 @@ import argparse
 import json
 
 from typing import Dict, List, Tuple
-from Tokenizer import clean_query_token, tokenize_query
+from Tokenizer import tokenize_query
 from QueryRefinement import expand_query, run_rocchio
+import Config
+
 
 def run_search(dict_file: str, postings_file: str, queries_file: str, results_file: str):
     """
@@ -14,16 +16,6 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
     file and output the results to the results file
     """
     print("running search on the queries...")
-
-    # Read config
-    with open("config.json", "r") as cf:
-        config = json.load(cf)
-        RUN_QUERY_EXPANSION = config["run_query_expansion"]
-        THESAURUS_FILENAME = config["file_names"]["thesaurus"]
-        
-        RUN_ROCCHIO = config["run_rocchio"]
-        ALPHA = config["rocchio"]["alpha"]
-        BETA = config["rocchio"]["beta"]
 
     # Read query file
     query_tokens = []
@@ -37,8 +29,8 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
     # if we are doing query expansion, we expand the query using
     # our thesaurus prebuilt from a legal text corpus
     print("Before", query_tokens)
-    if RUN_QUERY_EXPANSION:
-        with open(THESAURUS_FILENAME, "rb") as tf:
+    if Config.RUN_QUERY_EXPANSION:
+        with open(Config.THESAURUS_FILENAME, "rb") as tf:
             thesaurus = pickle.load(tf)
         query_tokens = expand_query(query_tokens, thesaurus)
     print("After", query_tokens)

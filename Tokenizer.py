@@ -13,17 +13,19 @@ STEMMER = nltk.stem.porter.PorterStemmer()
 csv.field_size_limit(int(ct.c_ulong(-1).value // 2))  # found a fix from StackOverflow for field size too small
 
 
-def make_doc_read_generator(in_file: str) -> TermInfoTupleGenerator:
+def make_doc_read_generator(in_file: str, stop_words_file: str) -> TermInfoTupleGenerator:
     """
     Generator function for the next (term, term_pos, doc_length, doc_id) tuple.
     Call this function to make the generator first, then use next() to generate the next tuple.
+    Skips over stop words.
     Yields (None, None, None, None) when done.
     :param in_file: The name of the input file
+    :param stop_words_file: The name of the stop words file.
     :return: A generator object for the term information tuple (see above)
     """
 
     # read the provided stop words file ONCE and keep stop words in memory
-    with open('stopwords.txt', 'r') as f:
+    with open(stop_words_file, 'r') as f:
         stopwords = set(f.read().split())
 
     with open(in_file, mode='r', encoding='utf-8', newline='') as doc:
