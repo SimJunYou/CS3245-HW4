@@ -29,27 +29,33 @@ def make_doc_read_generator(in_file: str, stop_words_file: str) -> TermInfoTuple
     with open(stop_words_file, 'r') as f:
         stopwords = set(f.read().split())
 
+    already_read: Set[DocId] = set()
     with open(in_file, mode='r', encoding='utf-8', newline='') as doc:
         doc_reader = csv.reader(doc)
         for i, row in enumerate(doc_reader):
             if i == 0:
                 continue  # we skip the first row (headers)
+            elif i % 50 == 0:
+                print("progress:", i)
+
             doc_id, title, content, date_posted, court = row
 
-            title_tokens = tokenize(title, "title", stopwords)
-            # Specialised tokenizer for content in order to extract zones
-            content_tokens = contentTokenize(content, stopwords, court)
+            # since duplicates exist in the corpus, here we skip doc IDs already processed
+            if int(doc_id) in already_read:
+                continue
+            else:
+                already_read.add(int(doc_id))
 
+            title_tokens = tokenize(title, "title", stopwords)
             date_tokens = tokenize(date_posted, "date", stopwords)
             court_tokens = tokenize(court, "court", stopwords)
 
+            # when zone is "content", perform extra parsing
+            # for this, the name of the court is required so pass it in as a param
+            content_tokens = tokenize(content, "content", stopwords, court=court)
+
             tokens = title_tokens + content_tokens + date_tokens + court_tokens
             doc_length = len(tokens)
-
-            if doc_id == "246407":
-                print(tokens)
-
-            print("progress:", i)
 
             # for this assignment, we can assume that document names are integers without exception
             # since we are using a generator, we only count the number of tokens once per file
@@ -58,15 +64,20 @@ def make_doc_read_generator(in_file: str, stop_words_file: str) -> TermInfoTuple
     yield None, None, None, None
 
 
-def tokenize(doc_text: str, zone: str, stop_words: Set[str]) -> List[str]:
+def tokenize(doc_text: str,
+             zone: str,
+             stop_words: Set[str],
+             court: Optional[str] = None) -> List[str]:
     """
     Takes in document text and tokenizes.
     Also does post-tokenization cleaning like stemming.
     :param doc_text: The text to be tokenized
     :param zone: The zone the text is associated with
     :param stop_words: The set of stop words to be used
+    :param court: The name of the court (only included when zone is "content")
     :return: List of tokens
     """
+
     # case folding
     doc_text = doc_text.lower()
 
@@ -83,42 +94,12 @@ def tokenize(doc_text: str, zone: str, stop_words: Set[str]) -> List[str]:
 
     # each token will have the zone appended to the front using the @ symbol
     # for example, "title@token", "content@token"
-    tokens = [zone + '@' + token for token in tokens]
+    if zone == "content":
+        tokens = create_zones(tokens, court)
+    else:
+        tokens = [zone + '@' + token for token in tokens]
 
     return tokens
-
-
-
-def contentTokenize(doc_text: str, stop_words: Set[str], court: str)-> List[str]:
-    """
-    Takes in document text and tokenizes.
-    Also does post-tokenization cleaning like stemming.
-    :param doc_text: The text to be tokenized
-    :param stop_words: The set of stop words to be used
-    :param court: The court the text is associated with
-    :return: List of tokens
-    """
-    # case folding
-    doc_text = doc_text.lower()
-
-    # tokenize and stem
-    tokens = nltk.tokenize.word_tokenize(doc_text)
-    tokens = [STEMMER.stem(tok) for tok in tokens]
-
-    # remove tokens that are purely punctuation
-    def is_not_only_punct(tok): return any(char not in string.punctuation for char in tok)
-    tokens = [tok for tok in tokens if is_not_only_punct(tok)]
-
-    # remove stopwords from the tokens and add delimiter for zones
-    tokens = [word for word in tokens if word not in stop_words]
-
-    # each token will have the zone appended to the front using the @ symbol
-    # for example, "title@token", "content@token"
-    # tokens = [zone + '@' + token for token in tokens]
-    terms = create_zones(tokens,court)        
-
-    return terms
-
 
 
 def create_zones(tokens: List[Term], court: str) -> List[Term]:
@@ -188,7 +169,6 @@ def create_zones(tokens: List[Term], court: str) -> List[Term]:
     return term_list
 
 
-
 def clean_query_token(token: str) -> str:
     """
     Case-folds and stems a single token.
@@ -201,7 +181,7 @@ def clean_query_token(token: str) -> str:
 def tokenize_query(query: str) -> List[str]:
     """
     Takes in a string and performs tokenization, stemming and case-folding.
-    :param line: the string to process
+    :param query: the string to process
     :return: a list of processed tokens
     """
     tokens = nltk.word_tokenize(query)

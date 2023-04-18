@@ -25,7 +25,6 @@ class PostingReader:
         self._filename: str = file
         self._dct: Dict[Term, int] = dct  # Term -> pointer
         self._loc: int = 0
-        self._contains_pos: bool = False  # whether file contains pos. indices (set in __enter__ method)
         self._done: bool = False       # flag for completing the reading of the given posting list
         self._remaining_docs: int = 0  # keeps count of remaining docs in current posting list
         self._remaining_pos: int = 0   # keeps count of remaining term positions left in current doc
@@ -33,6 +32,9 @@ class PostingReader:
         self._term_freq: TermFreq = 0  # records term frequency of current doc:term pair
         self._current_doc: DocId = 0   # records the id of the current doc
         self._curr_pos: TermPos = 0    # records the current term position (to undo gap encoding)
+
+        # keeps track of whether it is the first read after seek
+        self._is_first_read: bool = False
 
     def seek_term(self, term: str) -> None:
         """
@@ -50,46 +52,31 @@ class PostingReader:
 
         # get document frequency and update remaining count
         self._doc_freq = self.read_next_int()
-        if self._contains_pos:
-            # reading works slightly differently if the file contains pos. indices
-            # we immediately read the first doc ID, so we start with -1 from remaining docs
-            self._remaining_docs = self._doc_freq - 1
 
-            # get current document ID and update
-            curr_doc = self.read_next_int()
-            self._current_doc = curr_doc
+        # we immediately read the first doc ID, so we start with -1 from remaining docs
+        self._remaining_docs = self._doc_freq - 1
 
-            # get term pos count for current doc and update remaining count
-            term_pos_num = self.read_next_int()
-            self._remaining_pos = term_pos_num  # this is for internal use (changes)
-            self._term_freq = term_pos_num  # this is for data (does not change)
-        else:
-            # if the file does not contain pos. indices, we do not read immediately when seeking
-            # so, we do not start with -1 from remaining docs
-            self._remaining_docs = self._doc_freq
-
-        # in our implementation, we save location after reading and re-seek each time
-        self._loc = self._f.tell()
+        # set is_first_read
+        self._is_first_read = True
 
     def read_next_int(self) -> int:
         """
         Reads the next integer from the encoded file by decoding the variable byte encoding.
         :return: Next integer decoded from the file
         """
-        buffer: int = int.from_bytes(self._f.read(1), sys.byteorder)
-        collected_int: int = 0
-        bits_added = 0
+        byte: int
+        new_int: int = 0
+        bits: int = 0
         while True:
-            # inverse of the way we did variable byte encoding
-            collected_int |= (buffer & 0b0111_1111) << bits_added
-            bits_added += 7
-            if buffer & 0b1000_0000:  # if continuation byte, we should continue to read
-                buffer = int.from_bytes(self._f.read(1), sys.byteorder)
+            byte = int.from_bytes(self._f.read(1), sys.byteorder)
+            if byte > 128:
+                new_int += (byte % 128) << bits
+                return new_int
             else:
-                break
-        return collected_int
+                new_int += byte << bits
+                bits += 7
 
-    def read_next_doc(self) -> Tuple[DocId, TermFreq] | Tuple[DocId, TermFreq, TermPos]:
+    def read_next_doc(self) -> Tuple[DocId, TermFreq, TermPos]:
         """
         Seek to the next document in the current posting list, discarding all read values in between.
         Returns the first set of values from the next document
@@ -100,51 +87,13 @@ class PostingReader:
         curr_doc: DocId = self._current_doc
         term_freq: TermFreq
         term_pos: TermPos
-        if self._contains_pos:
-            term_freq = term_pos = 0
-            rem_docs = self._remaining_docs
-            for _ in range(rem_docs):
-                curr_doc, term_freq, term_pos = self.read_entry()
-            return curr_doc, term_freq, term_pos
-        else:
-            curr_doc, term_freq = self.read_entry()
-            return curr_doc, term_freq
+        term_freq = term_pos = 0
+        rem_docs = self._remaining_docs
+        for _ in range(rem_docs):
+            curr_doc, term_freq, term_pos = self.read_entry()
+        return curr_doc, term_freq, term_pos
 
     def read_entry(self) -> Tuple[DocId, TermFreq] | Tuple[DocId, TermFreq, TermPos]:
-        """
-        Using the current position of the instance's file pointer,
-        read the next entry in the posting list and return it as a tuple:
-        >> (doc_id, term_freq, term_pos) [if the file contains pos. indices]
-        >> (doc_id, term_freq)           [otherwise]
-        :return: Tuple of document ID, term frequency, and optionally term position
-        """
-        if self._contains_pos:
-            return self._read_entry_with_pos()
-        else:
-            return self._read_entry_without_pos()
-
-    def _read_entry_without_pos(self) -> Tuple[DocId, TermFreq]:
-        """
-        Using the current position of the instance's file pointer,
-        read the next entry in the posting list and return it as a tuple:
-        >> (doc_id, term_freq)
-        :return: Tuple of document ID, term frequency
-        """
-        # throw error if we're trying to read a completely read posting list
-        assert not self._done, "Reading of posting list is already complete!"
-
-        self._f.seek(self._loc, 0)
-        if self._remaining_docs > 0:
-            self._remaining_docs -= 1
-            if self._remaining_docs == 0:
-                self._done = True
-            self._current_doc = self.read_next_int()
-            self._term_freq = self.read_next_int()
-
-        self._loc = self._f.tell()  # update position
-        return self._current_doc, self._term_freq
-
-    def _read_entry_with_pos(self) -> Tuple[DocId, TermFreq, TermPos]:
         """
         Using the current position of the instance's file pointer,
         read the next entry in the posting list and return it as a tuple:
@@ -154,23 +103,27 @@ class PostingReader:
         # throw error if we're trying to read a completely read posting list
         assert not self._done, "Reading of posting list is already complete!"
 
-        self._f.seek(self._loc, 0)
-
-        if self._remaining_pos:  # if there are still term positions remaining,
-            self._remaining_pos -= 1
-            self._curr_pos += self.read_next_int()  # increment gap to get actual term pos
-        else:  # else, we go to the next document
-            self._remaining_docs -= 1
-            # read the headers -> (doc_id)(num_tp), then read the first term pos
+        if self._is_first_read:
             self._current_doc = self.read_next_int()
             self._term_freq = self.read_next_int()
-            self._remaining_pos = self._term_freq - 1  # we will read one term pos, so -1
-            self._curr_pos = self.read_next_int()  # reset term pos at each document
+            self._curr_pos += self.read_next_int()
+            self._remaining_pos = self._term_freq - 1
+            self._is_first_read = False
+            return self._current_doc, self._term_freq, self._curr_pos
 
-        if self._remaining_pos <= 0 and self._remaining_docs <= 0:
+        if self._remaining_pos == 0:
+            self._current_doc = self.read_next_int()
+            self._term_freq = self.read_next_int()
+            self._remaining_docs -= 1
+            self._remaining_pos = self._term_freq
+            self._curr_pos = 0
+
+        self._curr_pos += self.read_next_int()
+        self._remaining_pos -= 1
+
+        if self._remaining_docs == self._remaining_pos == 0:
             self._done = True
 
-        self._loc = self._f.tell()  # update position
         return self._current_doc, self._term_freq, self._curr_pos
 
     def is_done(self):
@@ -179,16 +132,12 @@ class PostingReader:
     def get_doc_freq(self):
         return self._doc_freq
 
-    def has_pos(self):
-        return self._contains_pos
-
     def get_num_docs_remaining(self):
         return self._remaining_docs
 
     def get_stats(self):
         print("file name:\t", self._filename,
               "\nfile ptr:\t", self._loc,
-              "\nhas pos:\t", self._contains_pos,
               "\nis done:\t", self._done,
               "\nrem docs:\t", self._remaining_docs,
               "\nrem pos:\t", self._remaining_pos,
@@ -197,12 +146,7 @@ class PostingReader:
               "\ncurr pos:\t", self._curr_pos)
 
     def __enter__(self):
-        """
-        Upon initialization, read the header to figure out whether the postings list file contains positional indices.
-        """
         self._f = open(self._filename, "rb")
-        header = self._f.read(1)
-        self._contains_pos = (header == b"\xFF")
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -266,7 +210,7 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
 
         for term, posting_list in dictionary.items():
             posting_list_serialized: bytes
-            posting_list_serialized = serialize_posting(posting_list, write_pos)
+            posting_list_serialized = serialize_posting(term, posting_list, write_pos)
 
             # cumulative_ptr stores the number of bytes from the start of the file to the current entry
             # this lets us seek directly to the entry of the term we want
@@ -281,7 +225,7 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
     print(f"Wrote {len(dictionary)} terms into final files")
 
 
-def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
+def serialize_posting(term, posting_list: Dict[DocId, List[TermPos]],
                       write_pos: bool) -> bytes:
     """
     Turns a posting list into a bytearray, and returns the bytearray.
@@ -369,10 +313,10 @@ def variable_byte_encode(num: int) -> bytes:
     new_num = 0
     byte_count = 0
     while num > 0:
-        new_part = (num & 0b1111111)
+        new_part = num % 128
         num >>= 7
-        if num > 0:
-            new_part |= 0b1000_0000  # add continuation bit
+        if num == 0:
+            new_part += 128  # add final bit to stop continuation
         new_num |= new_part << (8 * byte_count)
         byte_count += 1
     return new_num.to_bytes(byte_count, sys.byteorder)

@@ -6,6 +6,7 @@ from Types import *
 
 import Config
 
+
 def search_query(query: List[Term],
                  dictionary: Dict[Term, int],
                  docs_len_dct: Dict[DocId, DocLength],
@@ -71,7 +72,8 @@ def calc_query_vector(postings_file: str,
     Query vector will be in the form of a dictionary of term -> weight.
     :param postings_file: The name of the postings file
     :param dictionary: The dictionary of term -> postings file pointer
-    :param query_term: The list of query terms
+    :param query_terms: The list of query terms
+    :param n: The total number of documents
     :return: The query vector
     """
     query_vector: Vector = dict()
@@ -92,17 +94,17 @@ def calc_doc_vectors(postings_file: str,
     Document vectors will be in the form of a dictionary of (doc ID, term) -> weight.
     :param postings_file: The name of the postings file
     :param dictionary: The dictionary of term -> postings file pointer
-    :param query_term: The set of query terms
+    :param query_terms: The set of query terms
     :return: The document vector dictionary
     """
     doc_score_dct: Dict[Term, Dict[DocId, TermWeight]] = dict()
-    doc_vector_dct: Dict[DocId, Vector] = dict()
+    doc_vector_dct: Dict[DocId, Vector]
 
     with PostingReader(postings_file, dictionary) as pf:
         for query_term in query_terms:
             doc_score_dct[query_term] = get_doc_tfidf_dict(query_term, pf)
-        doc_vector_dct = invert_nested_dict(doc_score_dct)
 
+    doc_vector_dct = invert_nested_dict(doc_score_dct)
     return doc_vector_dct
 
 
@@ -161,11 +163,8 @@ def get_doc_tfidf_dict(term: str,
     pf.seek_term(term)
 
     weight_dct: Dict[DocId, float] = dict()
-    while (pf.has_pos() and pf.get_num_docs_remaining() > 0) or (not pf.has_pos() and not pf.is_done()):
-        if pf.has_pos():  # if positional indices are stored...
-            doc_id, term_freq, _ = pf.read_next_doc()
-        else:  # otherwise...
-            doc_id, term_freq = pf.read_entry()
+    while pf.get_num_docs_remaining() > 0:
+        doc_id, term_freq, _ = pf.read_next_doc()
         # since we read directly from posting list,
         # term freq will never be 0, so we can ignore that case
         weight_dct[doc_id] = 1 + log10(term_freq)

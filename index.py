@@ -75,9 +75,8 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
         if term in dictionary:
             # posting_list contains a mapping of doc_id -> term_freq
             # one posting_list is held for each term
-            posting_list = dictionary[term]
-            if doc_id in posting_list:
-                dictionary[term][doc_id] += [term_pos]
+            if doc_id in dictionary[term]:
+                dictionary[term][doc_id].append(term_pos)
             else:
                 dictionary[term][doc_id] = [term_pos]
         else:
