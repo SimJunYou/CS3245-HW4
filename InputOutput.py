@@ -83,7 +83,7 @@ class PostingReader:
             # inverse of the way we did variable byte encoding
             collected_int |= (buffer & 0b0111_1111) << bits_added
             bits_added += 7
-            if buffer & 0b1000_0000:  # if continuation byte, we should continue to read
+            if 0b1000_0000 > buffer:  # if final bit is absent, continue to read
                 buffer = int.from_bytes(self._f.read(1), sys.byteorder)
             else:
                 break
@@ -156,6 +156,9 @@ class PostingReader:
 
         self._f.seek(self._loc, 0)
 
+        if self._remaining_docs == 287:
+            self.get_stats()
+        # print(self._remaining_pos)
         if self._remaining_pos:  # if there are still term positions remaining,
             self._remaining_pos -= 1
             self._curr_pos += self.read_next_int()  # increment gap to get actual term pos
@@ -167,9 +170,13 @@ class PostingReader:
             self._remaining_pos = self._term_freq - 1  # we will read one term pos, so -1
             self._curr_pos = self.read_next_int()  # reset term pos at each document
 
+        if self._remaining_docs > 1_000_000:
+            self.get_stats()
+
         if self._remaining_pos <= 0 and self._remaining_docs <= 0:
             self._done = True
 
+        # TODO: Remove seek and tell? Let the file pointer save its own position
         self._loc = self._f.tell()  # update position
         return self._current_doc, self._term_freq, self._curr_pos
 
@@ -369,10 +376,10 @@ def variable_byte_encode(num: int) -> bytes:
     new_num = 0
     byte_count = 0
     while num > 0:
-        new_part = (num & 0b1111111)
+        new_part = (num % 0b1111111)
         num >>= 7
-        if num > 0:
-            new_part |= 0b1000_0000  # add continuation bit
+        if num == 0:
+            new_part |= 0b1000_0000  # add final bit to stop continuation
         new_num |= new_part << (8 * byte_count)
         byte_count += 1
     return new_num.to_bytes(byte_count, sys.byteorder)

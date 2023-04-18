@@ -2,10 +2,10 @@
 import pickle
 import argparse
 
-from typing import Dict, List, Tuple
+from typing import List
 from Tokenizer import tokenize_query
-from QueryRefinement import expand_query, run_rocchio
-from Searcher import search_query, calc_query_vector, calc_doc_vectors
+from QueryRefinement import expand_query
+from Searcher import search_query
 from Types import *
 import Config
 
@@ -19,7 +19,7 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
     print("running search on the queries...")
 
     # Read query file
-    query_tokens: List[str] = []
+    query_tokens: List[str]
     relevant_docs: List[DocId] = []
     with open(queries_file, "r") as qf:
         query = qf.readline()
@@ -33,12 +33,14 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
         with open(Config.THESAURUS_FILENAME, "rb") as tf:
             thesaurus = pickle.load(tf)
         query_tokens = expand_query(query_tokens, thesaurus)
+    print("expanded query")
 
     # we need to tag our query tokens with the zones
     # temp solution:
     query_tokens = ["content@" + tok for tok in query_tokens]
+    print("tagged query")
 
-    dct: Dict[Term, Dict[DocId, List[TermPos]]]
+    dct: Dict[Term, int]  # Term -> pointer in postings list file
     docs_len: Dict[DocId, DocLength]
     champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]]
 

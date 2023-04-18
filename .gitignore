@@ -7,6 +7,7 @@ lengths.txt
 postings.txt
 champion.txt
 results.txt
+*.zip
 Notes about Court Hierarchy.txt
 .vscode
 __pycache__
