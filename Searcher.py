@@ -58,7 +58,7 @@ def search_query(query: List[Term],
     # descending scores and tie-broken by ascending document IDs
     # return the top 10 in the list
     doc_scores = sorted(doc_scores, key=lambda x: x[0])
-    doc_scores = sorted(doc_scores, key=lambda x: x[1], reverse=True)[:10]
+    doc_scores = sorted(doc_scores, key=lambda x: x[1], reverse=True)
 
     return [x[0] for x in doc_scores]  # we only want to keep the doc IDs!
 
