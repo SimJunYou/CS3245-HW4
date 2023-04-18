@@ -142,29 +142,6 @@ def create_zones(tokens: List[Term], court: str) -> List[Term]:
             term_list += ["parties@" + tok]
         else:
             term_list += ["content@" + tok]
-    
-    # i = 0
-    # while i < len(tokens):
-    #     if tokens[i] in keywords:
-    #         # a rough heuristic is applied to add words according to their zones
-    #         for j in range(i, i + num_words):
-    #             if (j>len(tokens)):
-    #                 break
-    #             term_list.append("section" + "@" + tokens[j])
-    #         # go through unfinished tokens
-    #         i = i + num_words
-
-    #     elif tokens[i] in parties:
-    #         for k in range(i, i + parties_num_words):
-    #             if (k>len(tokens)):
-    #                 break
-    #             term_list.append("parties" + "@" + tokens[k])
-    #         i = i + parties_num_words
-            
-    #     else:
-    #         # add terms normally to content since they dont belong to any field
-    #         term_list.append("content" + "@" + tokens[i])
-    #         i += 1
             
     return term_list
 

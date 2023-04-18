@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import getopt
 import sys
-import json
 from math import log10
-from typing import Dict, List, Tuple
+from typing import  List
 
 # SELF-WRITTEN MODULES
 from InputOutput import write_block

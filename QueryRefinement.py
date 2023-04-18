@@ -1,10 +1,10 @@
 #!/usr/bin/python3
-from typing import List, Dict, Tuple, Set
+from typing import List, Set
 from Types import *
-from Tokenizer import clean_query_token
 
 # QUERY REFINEMENT
 # Includes both query expansion and relevance feedback
+
 
 def calc_centroid(champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]],
                   in_query_relevant_docs: List[DocId]) -> Vector:
@@ -55,7 +55,7 @@ def run_rocchio(alpha: float,
 
 
 def expand_query(tokens: List[str],
-                 thesaurus: Dict[str, Set[str]]) -> Set[str]:
+                 thesaurus: Dict[str, Set[str]]) -> List[str]:
     """
     Expands a query token to include related terms using the given thesaurus.
     :param tokens: List of tokens
@@ -67,4 +67,4 @@ def expand_query(tokens: List[str],
         result.add(token)
         for synonym in thesaurus.get(token, set()):
             result.add(synonym)
-    return result
+    return list(result)

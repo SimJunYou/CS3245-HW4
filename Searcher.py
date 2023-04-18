@@ -1,7 +1,7 @@
 from InputOutput import PostingReader
 from QueryRefinement import run_rocchio
 from math import log10
-from typing import Dict, List, Tuple, Set
+from typing import List
 from Types import *
 
 import Config

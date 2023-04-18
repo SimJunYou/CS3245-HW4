@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from typing import Dict, List, Tuple
+from typing import List
 from Types import *
 
 import pickle
@@ -210,7 +210,7 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
 
         for term, posting_list in dictionary.items():
             posting_list_serialized: bytes
-            posting_list_serialized = serialize_posting(term, posting_list, write_pos)
+            posting_list_serialized = serialize_posting(posting_list, write_pos)
 
             # cumulative_ptr stores the number of bytes from the start of the file to the current entry
             # this lets us seek directly to the entry of the term we want
@@ -225,7 +225,7 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
     print(f"Wrote {len(dictionary)} terms into final files")
 
 
-def serialize_posting(term, posting_list: Dict[DocId, List[TermPos]],
+def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
                       write_pos: bool) -> bytes:
     """
     Turns a posting list into a bytearray, and returns the bytearray.
