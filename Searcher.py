@@ -1,13 +1,13 @@
 from InputOutput import PostingReader
 from math import log10
-from typing import Dict, Tuple, List
+from typing import Dict, List
 from Types import *
 
 
-def process_query(query: List[Token],
-                  dictionary: Dict[Term, int],
-                  docs_len_dct: Dict[DocId, DocLength],
-                  postings_file: str) -> List[DocId]:
+def search_query(query: List[Token],
+                 dictionary: Dict[Term, int],
+                 docs_len_dct: Dict[DocId, DocLength],
+                 postings_file: str) -> List[DocId]:
     """
     Using the PostingReader interface, process a given query by calculating
     scores for each document from its posting list, then return at most 10
@@ -34,20 +34,20 @@ def process_query(query: List[Token],
             d_score_dct[query_term] = get_doc_tfidf_dict(query_term, pf)
 
         # finally, make it term -> doc_id _> tf.idf
-        d_score_dct = invert_nested_dict(d_score_dct)
+        d_score_dct_inv: Dict[DocId, Dict[Term, float]]
+        d_score_dct_inv = invert_nested_dict(d_score_dct)
 
         for query_term in query_terms:
             q_score_dct[query_term] = calc_query_tfidf(query_term, query, N, pf)
 
     # calculate the final scores for each document
-    scores = []
-    for doc_id in d_score_dct.keys():
-        dot_prod = 0
+    scores: List[Tuple[DocId, float]] = []
+    for doc_id in d_score_dct_inv.keys():
+        dot_prod = 0.
         for t in query_terms:
-            d_score = d_score_dct[doc_id].get(t, 0)
+            d_score = d_score_dct_inv[doc_id].get(t, 0.)
             dot_prod += d_score * q_score_dct[t]
-
-        score = dot_prod / docs_len_dct[doc_id]
+        score = dot_prod / docs_len_dct[doc_id]  # normalization
         scores.append((doc_id, score))
 
     # sort by ascending document ID first, then by descending score
@@ -62,8 +62,10 @@ def process_query(query: List[Token],
 
 def invert_nested_dict(original: Dict) -> Dict:
     """
+    Simple utility function.
     If a dictionary is originally dct[a][b] = c, this function inverts it to become dct[b][a] = c instead.
-    Returns a new dictionary.
+    :param original: Original dictionary, should be nested by one layer
+    :return: Inverted dictionary as described
     """
     flipped = dict()
     for key, nested_dct in original.items():
@@ -77,7 +79,7 @@ def invert_nested_dict(original: Dict) -> Dict:
 
 def calc_query_tfidf(term: Term,
                      query: List[Token],
-                     N: int,
+                     n: int,
                      pf: PostingReader) -> float:
     """
     Calculates the tf-idf weight of a term in a query.
@@ -85,13 +87,13 @@ def calc_query_tfidf(term: Term,
     Returns a SINGLE tf-idf weight for that term and query.
     :param term: The term itself
     :param query: List of tokens representing the query
-    :param N: Total number of documents
+    :param n: Total number of documents
     :param pf: The postings file reader interface
     :return: The calculated weight
     """
-    pf.seek(term)
+    pf.seek_term(term)
     df = pf.get_doc_freq()  # document frequency of term
-    idf = log10(N / df)  # inverse document freq of term
+    idf = log10(n / df)  # inverse document freq of term
 
     term_freq = query.count(term)
     weight = (1 + log10(term_freq)) * idf
@@ -100,7 +102,7 @@ def calc_query_tfidf(term: Term,
 
 
 def get_doc_tfidf_dict(term: str,
-                       pf: PostingReader) -> float:
+                       pf: PostingReader) -> Dict[DocId, float]:
     """
     Calculates the tf-idf weight of a term, for all docs listed in its
     posting list.
@@ -108,17 +110,18 @@ def get_doc_tfidf_dict(term: str,
     Returns a dictionary of doc ID -> tf-idf weight for that term/doc.
     :param term: The term itself
     :param pf: The postings file reader interface
-    :return: The calculated weight
+    :return: The dictionary of calculated weights for each doc ID
     """
     pf.seek_term(term)
-    weight_dct = dict()
-    while not pf.is_done():
-        # TODO: Make this part address pos index/ no pos index
-        doc_id, term_freq = pf.read_entry()
+
+    weight_dct: Dict[DocId, float] = dict()
+    while (pf.has_pos() and pf.get_num_docs_remaining() > 0) or (not pf.has_pos() and not pf.is_done()):
+        if pf.has_pos():  # if positional indices are stored...
+            doc_id, term_freq, _ = pf.read_next_doc()
+        else:  # otherwise...
+            doc_id, term_freq = pf.read_entry()
         # since we read directly from posting list,
-        # term freq will never be 0 so we can ignore that case
+        # term freq will never be 0, so we can ignore that case
         weight_dct[doc_id] = 1 + log10(term_freq)
 
     return weight_dct
-
-# TODO: Finish working on comments and reintegration

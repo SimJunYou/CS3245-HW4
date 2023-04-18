@@ -6,6 +6,7 @@ import json
 from typing import Dict, List, Tuple
 from Tokenizer import tokenize_query
 from QueryRefinement import expand_query, run_rocchio
+from Searcher import search_query
 import Config
 
 
@@ -35,6 +36,16 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
         query_tokens = expand_query(query_tokens, thesaurus)
     print("After", query_tokens)
 
+    # we need to tag our query tokens with the zones
+    # temp solution:
+    query_tokens = ["content@" + tok for tok in query_tokens]
+
+    with open(dict_file, 'rb') as df, open(Config.LENGTHS_FILE, 'rb') as lf:
+        dct = pickle.load(df)
+        docs_len = pickle.load(lf)
+    search_output = search_query(query_tokens, dct, docs_len, postings_file)
+    print(search_output)
+
     # if RUN_ROCCHIO:
     #     run_rocchio(ALPHA, BETA)
 
@@ -42,6 +53,7 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
     # result = ""
     # with open(results_file, "w") as rf:
     #     rf.write(result)
+
 
 # python3 search.py -d dictionary.txt -p postings.txt -q queries/q1.txt -o results.txt
 if __name__ == '__main__':

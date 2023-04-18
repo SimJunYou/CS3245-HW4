@@ -110,8 +110,8 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
                 top_K_terms_dct,
                 out_dict,
                 out_postings,
-                Config.OUT_LENGTHS,
-                Config.OUT_CHAMPION,
+                Config.LENGTHS_FILE,
+                Config.CHAMPION_FILE,
                 Config.WRITE_POS)
 
 

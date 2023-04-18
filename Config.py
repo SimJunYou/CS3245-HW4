@@ -5,10 +5,10 @@ with open("config.json", "r") as cf:
 
     # CHAMPION LIST FILE
     K: int = config["champion_list"]["K"]
-    OUT_CHAMPION: str = config["file_names"]["champion"]
+    CHAMPION_FILE: str = config["file_names"]["champion"]
 
     # LENGTHS FILE
-    OUT_LENGTHS: str = config["file_names"]["lengths"]
+    LENGTHS_FILE: str = config["file_names"]["lengths"]
 
     # STOP WORDS FILE
     STOP_WORDS_FILE: str = config["file_names"]["stop_words"]
