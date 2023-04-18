@@ -12,6 +12,18 @@ Indexing approach TBC, need to decide on how to approach positional indexing.
 
 TBC.
 
+#### Relevance Feedback
+
+
+#### Query Expansion
+
+We created a thesaurus that is specific to legal-context by scraping dictionary.law.com,
+forming a mapping from a legal term to a set of related terms. We then performed stemming
+on both the key and value since we are performing stemming on the query (otherwise the 
+query and thesaurus would not match).
+
+Source code for scraping can be found [here](https://github.com/aizatazhar/law_scraper).
+
 ## Project style and setup
 
 ### Project setup

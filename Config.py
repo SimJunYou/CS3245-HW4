@@ -1,26 +1,75 @@
-import json
+# Configuration file for various parameters
 
-with open("config.json", "r") as cf:
-    config = json.load(cf)
+# CHAMPION LIST FILE
+K: int = 10
+CHAMPION_FILE: str = "champion.txt"
 
-    # CHAMPION LIST FILE
-    K: int = config["champion_list"]["K"]
-    CHAMPION_FILE: str = config["file_names"]["champion"]
+# LENGTHS FILE
+LENGTHS_FILE: str = "lengths.txt"
 
-    # LENGTHS FILE
-    LENGTHS_FILE: str = config["file_names"]["lengths"]
+# STOP WORDS FILE
+STOP_WORDS_FILE: str = "stopwords.txt"
 
-    # STOP WORDS FILE
-    STOP_WORDS_FILE: str = config["file_names"]["stop_words"]
+# POSITIONAL INDICES
+WRITE_POS: bool = True
 
-    # POSITIONAL INDICES
-    WRITE_POS: bool = config["write_pos_indices"]
+# QUERY EXPANSION
+RUN_QUERY_EXPANSION: bool = True
+THESAURUS_FILENAME: str = "stemmed_thesaurus.pickle"
 
-    # QUERY EXPANSION
-    RUN_QUERY_EXPANSION: bool = config["run_query_expansion"]
-    THESAURUS_FILENAME: str = config["file_names"]["thesaurus"]
+# RELEVANCE FEEDBACK
+RUN_ROCCHIO: bool = True
+ALPHA: float = 1.0
+BETA: float = 0.75
 
-    # RELEVANCE FEEDBACK
-    RUN_ROCCHIO: bool = config["run_rocchio"]
-    ALPHA: float = config["rocchio"]["alpha"]
-    BETA: float = config["rocchio"]["beta"]
+# CONTENT PARSING
+PARSING_CONFIG = {
+    'NSW Court of Criminal Appeal': {
+        'section': 'section, act, case, number, s, crime',
+        'num_words': 10, # estimate number of words in a section
+        'parties': 'parties, witnesses, victims, appellant, ms, mr',
+        'parties_num_words': 3
+    },
+    'NSW Supreme Court': {
+        'section': 'section, act, case, number, s, crime',
+        'num_words': 10,
+        'parties': 'parties, witnesses, victims, appellant, ms, mr',
+        'parties_num_words': 3
+    },
+    'CA Supreme Court': {
+        'section': 'section, act, case, number',
+        'num_words': 10,
+        'parties': 'parties, defendant, present, sir, plaintiff',
+        'parties_num_words': 3
+    },
+    'NSW District Court': {
+        'section': 'section, act, case, number',
+        'num_words': 10,
+        'parties': 'parties, sir, mr',
+        'parties_num_words': 3
+    },
+    'SG High Court': {
+        'section': 'section, act, case, number, crime',
+        'num_words': 10,
+        'parties': 'parties, judge',
+        'parties_num_words': 3
+    },
+    'High Court of Australia': {
+        'section': 'section, act, case, number',
+        'num_words': 10,
+        'parties': 'parties, lawyer',
+        'parties_num_words': 3
+    },
+    'Federal Court of Australia': {
+        'section': 'section, act, case, number',
+        'num_words': 10,
+        'parties': 'parties',
+        'parties_num_words': 3
+    },
+    'SG Court of Appeal  ': {
+        'section': 'section, act, case, number',
+        'num_words': 10,
+        'parties': 'parties, judge, lawyer',
+        'parties_num_words': 3
+    }
+}

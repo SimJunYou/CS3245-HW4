@@ -5,6 +5,7 @@ import ctypes as ct
 import csv
 import nltk
 import string
+import Config
 
 from Types import *
 from typing import List, Set
@@ -36,12 +37,17 @@ def make_doc_read_generator(in_file: str, stop_words_file: str) -> TermInfoTuple
             doc_id, title, content, date_posted, court = row
 
             title_tokens = tokenize(title, "title", stopwords)
-            content_tokens = tokenize(content, "content", stopwords)
+            # Specialised tokenizer for content in order to extract zones
+            content_tokens = contentTokenize(content, stopwords, court)
+
             date_tokens = tokenize(date_posted, "date", stopwords)
             court_tokens = tokenize(court, "court", stopwords)
 
             tokens = title_tokens + content_tokens + date_tokens + court_tokens
             doc_length = len(tokens)
+
+            if doc_id == "246407":
+                print(tokens)
 
             print("progress:", i)
 
@@ -82,20 +88,119 @@ def tokenize(doc_text: str, zone: str, stop_words: Set[str]) -> List[str]:
     return tokens
 
 
-def clean_query_token(operand: str) -> str:
+
+def contentTokenize(doc_text: str, stop_words: Set[str], court: str)-> List[str]:
     """
-    Case-folds and stems a single operand (token).
-    For use in Parser, when parsing queries.
-    :param operand: The token to be case-folded and stemmed
+    Takes in document text and tokenizes.
+    Also does post-tokenization cleaning like stemming.
+    :param doc_text: The text to be tokenized
+    :param stop_words: The set of stop words to be used
+    :param court: The court the text is associated with
+    :return: List of tokens
+    """
+    # case folding
+    doc_text = doc_text.lower()
+
+    # tokenize and stem
+    tokens = nltk.tokenize.word_tokenize(doc_text)
+    tokens = [STEMMER.stem(tok) for tok in tokens]
+
+    # remove tokens that are purely punctuation
+    def is_not_only_punct(tok): return any(char not in string.punctuation for char in tok)
+    tokens = [tok for tok in tokens if is_not_only_punct(tok)]
+
+    # remove stopwords from the tokens and add delimiter for zones
+    tokens = [word for word in tokens if word not in stop_words]
+
+    # each token will have the zone appended to the front using the @ symbol
+    # for example, "title@token", "content@token"
+    # tokens = [zone + '@' + token for token in tokens]
+    terms = create_zones(tokens,court)        
+
+    return terms
+
+
+
+def create_zones(tokens: List[Term], court: str) -> List[Term]:
+    """
+    Given a list of raw terms, parse them with the specific parser for its court and
+    tag the content with more accurate tags.
+    :param tokens: The list of input terms
+    :param court: The name of the court as a string
+    :return: The list of tagged terms
+    """
+    
+    # handle the case where we have not created a special parsing config for the court
+    # this is only the case for the less frequently occurring courts
+    if court not in Config.PARSING_CONFIG:
+        return ["content@" + tok for tok in tokens]
+    court_field = Config.PARSING_CONFIG[court]
+    
+    # find number of words for that specific court
+    section_num_words = court_field['num_words']
+    keywords = court_field['section'].split(', ')
+    parties = court_field['parties'].split(', ')
+    parties_num_words = court_field['parties_num_words']
+    
+    term_list = []
+    
+    # check all tokens for key word
+    remaining_section = 0
+    remaining_parties = 0
+    for tok in tokens:
+        if remaining_section == 0 and remaining_parties == 0:
+            if tok in keywords:
+                remaining_section = section_num_words
+            elif tok in parties:
+                remaining_parties = parties_num_words
+        if remaining_section:
+            remaining_section -= 1
+            term_list += ["section@" + tok]
+        elif remaining_parties:
+            remaining_section -= 1
+            term_list += ["parties@" + tok]
+        else:
+            term_list += ["content@" + tok]
+    
+    # i = 0
+    # while i < len(tokens):
+    #     if tokens[i] in keywords:
+    #         # a rough heuristic is applied to add words according to their zones
+    #         for j in range(i, i + num_words):
+    #             if (j>len(tokens)):
+    #                 break
+    #             term_list.append("section" + "@" + tokens[j])
+    #         # go through unfinished tokens
+    #         i = i + num_words
+
+    #     elif tokens[i] in parties:
+    #         for k in range(i, i + parties_num_words):
+    #             if (k>len(tokens)):
+    #                 break
+    #             term_list.append("parties" + "@" + tokens[k])
+    #         i = i + parties_num_words
+            
+    #     else:
+    #         # add terms normally to content since they dont belong to any field
+    #         term_list.append("content" + "@" + tokens[i])
+    #         i += 1
+            
+    return term_list
+
+
+
+def clean_query_token(token: str) -> str:
+    """
+    Case-folds and stems a single token.
+    :param token: The token to be case-folded and stemmed
     :return: Case-folded and stemmed token
     """
-    return STEMMER.stem(operand.lower())
+    return STEMMER.stem(token.lower())
 
 
 def tokenize_query(query: str) -> List[str]:
     """
-    Takes in a string and performs tokenization, stemming and case-folding
-
+    Takes in a string and performs tokenization, stemming and case-folding.
     :param line: the string to process
     :return: a list of processed tokens
     """

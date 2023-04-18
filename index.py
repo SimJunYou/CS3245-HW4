@@ -87,6 +87,7 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
     N = len(docs_len_dct)  # total number of docs
 
     top_K_terms_dct: Dict[DocId, List[Tuple[Term, TermWeight]]] = {}
+
     for doc_id in docs_len_dct:
         term_weight_list: List[Tuple[Term, TermWeight]] = []
         for term in dictionary:  

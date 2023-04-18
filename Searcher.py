@@ -1,13 +1,18 @@
 from InputOutput import PostingReader
+from QueryRefinement import run_rocchio
 from math import log10
-from typing import Dict, List
+from typing import Dict, List, Tuple, Set
 from Types import *
 
+import Config
 
-def search_query(query: List[Token],
+def search_query(query: List[Term],
                  dictionary: Dict[Term, int],
                  docs_len_dct: Dict[DocId, DocLength],
-                 postings_file: str) -> List[DocId]:
+                 postings_file: str,
+                 relevant_docs: List[DocId],
+                 champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]]
+                 ) -> List[DocId]:
     """
     Using the PostingReader interface, process a given query by calculating
     scores for each document from its posting list, then return at most 10
@@ -16,48 +21,89 @@ def search_query(query: List[Token],
     :param dictionary: A dictionary of terms to their positions in the postings list
     :param docs_len_dct: A dictionary of doc ID to doc length
     :param postings_file: The name of the postings list file
+    :param relevant_docs: The list of relevant document IDs (from the query file)
+    :param champion_dct: The champion list as a dictionary
     :return: A list of relevant document IDs
     """
     all_query_terms = set(query)
     dictionary_terms = set(dictionary.keys())
-    query_terms = all_query_terms & dictionary_terms
+    query_terms = list(all_query_terms & dictionary_terms)
     N = len(docs_len_dct)
 
-    # q_score_dct[term] = tf.idf_(term, query)
-    q_score_dct: Dict[Term, float] = dict()
+    # CALCULATE QUERY VECTOR
+    query_vector: Vector
+    query_vector = calc_query_vector(postings_file, dictionary, query_terms, N)
 
-    # d_score_dct[term][doc_id] = tf.idf_(term, document)
-    d_score_dct: Dict[Term, Dict[DocId, float]] = dict()
+    # REFINE QUERY VECTOR W/ ROCCHIO ALGO
+    if Config.RUN_ROCCHIO:
+        query_vector = run_rocchio(Config.ALPHA, Config.BETA, champion_dct, relevant_docs, query_vector)
 
-    with PostingReader(postings_file, dictionary) as pf:
-        for query_term in query_terms:
-            d_score_dct[query_term] = get_doc_tfidf_dict(query_term, pf)
-
-        # finally, make it term -> doc_id _> tf.idf
-        d_score_dct_inv: Dict[DocId, Dict[Term, float]]
-        d_score_dct_inv = invert_nested_dict(d_score_dct)
-
-        for query_term in query_terms:
-            q_score_dct[query_term] = calc_query_tfidf(query_term, query, N, pf)
+    # CALCULATE DOCUMENT VECTOR
+    doc_vector_dct: Dict[DocId, Vector]
+    doc_vector_dct = calc_doc_vectors(postings_file, dictionary, query_terms)
 
     # calculate the final scores for each document
-    scores: List[Tuple[DocId, float]] = []
-    for doc_id in d_score_dct_inv.keys():
+    doc_scores: List[Tuple[DocId, float]] = []
+    for doc_id in doc_vector_dct.keys():
         dot_prod = 0.
         for t in query_terms:
-            d_score = d_score_dct_inv[doc_id].get(t, 0.)
-            dot_prod += d_score * q_score_dct[t]
+            d_score = doc_vector_dct[doc_id].get(t, 0.)
+            dot_prod += d_score * query_vector[t]
         score = dot_prod / docs_len_dct[doc_id]  # normalization
-        scores.append((doc_id, score))
+        doc_scores.append((doc_id, score))
 
     # sort by ascending document ID first, then by descending score
     # since Python's sort is stable, we end up with a list sorted by
     # descending scores and tie-broken by ascending document IDs
     # return the top 10 in the list
-    scores = sorted(scores, key=lambda x: x[0])
-    scores = sorted(scores, key=lambda x: x[1], reverse=True)[:10]
+    doc_scores = sorted(doc_scores, key=lambda x: x[0])
+    doc_scores = sorted(doc_scores, key=lambda x: x[1], reverse=True)[:10]
 
-    return [x[0] for x in scores]  # return doc IDs only!
+    return [x[0] for x in doc_scores]  # we only want to keep the doc IDs!
+
+
+def calc_query_vector(postings_file: str,
+                      dictionary: Dict[Term, int],
+                      query_terms: List[str],
+                      n: int) -> Vector:
+    """
+    Calculates a query vector based on given query terms.
+    Query vector will be in the form of a dictionary of term -> weight.
+    :param postings_file: The name of the postings file
+    :param dictionary: The dictionary of term -> postings file pointer
+    :param query_term: The list of query terms
+    :return: The query vector
+    """
+    query_vector: Vector = dict()
+
+    with PostingReader(postings_file, dictionary) as pf:
+        for term in query_terms:
+            query_vector[term] = calc_query_tfidf(
+                term, query_terms, n, pf)
+
+    return query_vector
+
+
+def calc_doc_vectors(postings_file: str,
+                     dictionary: Dict[Term, int],
+                     query_terms: List[str]) -> Dict[DocId, Vector]:
+    """
+    Calculates a doc vectors based on given query terms.
+    Document vectors will be in the form of a dictionary of (doc ID, term) -> weight.
+    :param postings_file: The name of the postings file
+    :param dictionary: The dictionary of term -> postings file pointer
+    :param query_term: The set of query terms
+    :return: The document vector dictionary
+    """
+    doc_score_dct: Dict[Term, Dict[DocId, TermWeight]] = dict()
+    doc_vector_dct: Dict[DocId, Vector] = dict()
+
+    with PostingReader(postings_file, dictionary) as pf:
+        for query_term in query_terms:
+            doc_score_dct[query_term] = get_doc_tfidf_dict(query_term, pf)
+        doc_vector_dct = invert_nested_dict(doc_score_dct)
+
+    return doc_vector_dct
 
 
 def invert_nested_dict(original: Dict) -> Dict:
@@ -78,7 +124,7 @@ def invert_nested_dict(original: Dict) -> Dict:
 
 
 def calc_query_tfidf(term: Term,
-                     query: List[Token],
+                     query_terms: List[Term],
                      n: int,
                      pf: PostingReader) -> float:
     """
@@ -86,7 +132,7 @@ def calc_query_tfidf(term: Term,
     Takes in the posting file reader, N (total number of docs), and the list of tokens in the query.
     Returns a SINGLE tf-idf weight for that term and query.
     :param term: The term itself
-    :param query: List of tokens representing the query
+    :param query_terms: List of tokens representing the query
     :param n: Total number of documents
     :param pf: The postings file reader interface
     :return: The calculated weight
@@ -95,7 +141,7 @@ def calc_query_tfidf(term: Term,
     df = pf.get_doc_freq()  # document frequency of term
     idf = log10(n / df)  # inverse document freq of term
 
-    term_freq = query.count(term)
+    term_freq = query_terms.count(term)
     weight = (1 + log10(term_freq)) * idf
 
     return weight
