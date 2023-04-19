@@ -1,6 +1,10 @@
 /dataset
+/cache
+/A0199724M-A0200198L-A0206022B-A0211551W
 /queries
+/old_submissions
 /.idea
+.DS_Store
 *.pdf
 dictionary.txt
 lengths.txt
