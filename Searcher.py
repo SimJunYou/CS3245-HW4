@@ -43,7 +43,7 @@ def search_phrasal_query(phrasal_query: str,
 
     result: Dict[DocId, Set[TermPos]] = dict()
     for i, query_term in enumerate(phrasal_query):
-        if query_term not in term_data or query_term is None:  # query term is a stop word
+        if query_term not in term_data:  # query term is a stop word
             continue
         if not result:  # if initializing result
             result.update(term_data[query_term])
