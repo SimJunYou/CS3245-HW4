@@ -82,6 +82,12 @@ class PostingReader:
         Returns the first set of values from the next document
         :return: Same tuple as read_entry would return
         """
+        # special case for terms with only 1 document
+        if self._is_first_read and self._remaining_docs == 0:
+            curr_doc, term_freq, term_pos = self.read_entry()
+            self._is_first_read = False
+            return curr_doc, term_freq, term_pos
+        
         assert self._remaining_docs > 0, "No next document!"
 
         curr_doc: DocId = self._current_doc

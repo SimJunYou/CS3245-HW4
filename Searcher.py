@@ -29,6 +29,13 @@ def search_query(query: List[Term],
     all_query_terms = set(query)
     dictionary_terms = set(dictionary.keys())
     query_terms = list(all_query_terms & dictionary_terms)
+    
+    
+    # print(query_terms)
+    # for query_term in query_terms:
+    #     with PostingReader(postings_file, dictionary) as pf:
+    #         print(pf.seek_term(query_term))
+
     N = len(docs_len_dct)
 
     # CALCULATE QUERY VECTOR
@@ -61,7 +68,8 @@ def search_query(query: List[Term],
     doc_scores = sorted(doc_scores, key=lambda x: x[0])
     doc_scores = sorted(doc_scores, key=lambda x: x[1], reverse=True)
 
-    return [x[0] for x in doc_scores]  # we only want to keep the doc IDs!
+    # we only want to keep the doc IDs, doc_scores is needed for boolean and
+    return [x[0] for x in doc_scores], doc_scores
 
 
 def calc_query_vector(postings_file: str,
@@ -86,6 +94,7 @@ def calc_query_vector(postings_file: str,
 
     return query_vector
 
+
 def boolean_and(listA: List[DocId], listB: List[DocId]):
     """
     And operation to find intersect between two lists WITHOUT skip pointers
@@ -93,9 +102,18 @@ def boolean_and(listA: List[DocId], listB: List[DocId]):
     :param listB: list of IDs in second list
     :return: list of IDs in both lists
     """
-    return sorted(list(set(listA).intersection(set(listB))))
+    if (not listA or not listB):
+        return []
 
-# List[Tuple[Term, TermWeight]
+    if (type(listA[0]) is tuple):
+        dictA = dict(listA)
+        dictB = dict(listB)
+        commonDocIds = set(dictA.keys()).intersection(set(dictB.keys()))
+        result = [(docId, dictA.get(docId)) for docId in commonDocIds]
+        result = (sorted(result, key=lambda x: x[1]))
+        return getSubList(result, 0)
+    else:
+        return sorted(list(set(listA) & set(listB)))
 
 
 def generate_SP(postings: List[DocId]) -> List[Tuple[DocId, SkipPointer]]:
@@ -250,10 +268,15 @@ def get_doc_tfidf_dict(term: str,
     pf.seek_term(term)
 
     weight_dct: Dict[DocId, float] = dict()
-    while pf.get_num_docs_remaining() > 0:
-        doc_id, term_freq, _ = pf.read_next_doc()
-        # since we read directly from posting list,
-        # term freq will never be 0, so we can ignore that case
-        weight_dct[doc_id] = 1 + log10(term_freq)
+    prev_doc = 0
+    while True:
+        doc_id, term_freq, _ = pf.read_entry()
+        if prev_doc != doc_id:
+            # since we read directly from posting list,
+            # term freq will never be 0, so we can ignore that case
+            weight_dct[doc_id] = 1 + log10(term_freq)
+            prev_doc = doc_id
+        if pf.get_num_docs_remaining() == 0:
+            break
 
     return weight_dct
