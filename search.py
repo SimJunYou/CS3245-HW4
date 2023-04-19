@@ -94,8 +94,8 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
                                         champion_dct)
 
     output = " ".join(map(str, search_output))
-    print("Output", output)
-    print("Relevant docs", relevant_docs)
+    # print("Output", output)
+    # print("Relevant docs", relevant_docs)
     with open(results_file, "w") as rf:
         rf.write(output)
 

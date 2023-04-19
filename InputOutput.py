@@ -67,10 +67,12 @@ class PostingReader:
         byte: int
         new_int: int = 0
         bits: int = 0
+        counter = 0
         while True:
             byte = int.from_bytes(self._f.read(1), sys.byteorder)
-            if byte > 128:
-                new_int += (byte % 128) << bits
+            counter += 1
+            if byte >= 128:
+                new_int += (byte % 128) * 2**bits
                 return new_int
             else:
                 new_int += byte << bits
@@ -82,12 +84,6 @@ class PostingReader:
         Returns the first set of values from the next document
         :return: Same tuple as read_entry would return
         """
-        # special case for terms with only 1 document
-        if self._is_first_read and self._remaining_docs == 0:
-            curr_doc, term_freq, term_pos = self.read_entry()
-            self._is_first_read = False
-            return curr_doc, term_freq, term_pos
-        
         assert self._remaining_docs > 0, "No next document!"
 
         curr_doc: DocId = self._current_doc
@@ -115,6 +111,8 @@ class PostingReader:
             self._curr_pos += self.read_next_int()
             self._remaining_pos = self._term_freq - 1
             self._is_first_read = False
+            if self._remaining_docs == self._remaining_pos == 0:
+                self._done = True
             return self._current_doc, self._term_freq, self._curr_pos
 
         if self._remaining_pos == 0:

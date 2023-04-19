@@ -1,7 +1,7 @@
 from InputOutput import PostingReader
 from QueryRefinement import run_rocchio
 from math import log10, sqrt
-from typing import List
+from typing import List, Set
 from Types import *
 
 import Config
@@ -29,12 +29,48 @@ def search_query(query: List[Term],
     all_query_terms = set(query)
     dictionary_terms = set(dictionary.keys())
     query_terms = list(all_query_terms & dictionary_terms)
+    query_terms = ["section@basuri", "section@number"]
+
+    with PostingReader(postings_file, dictionary) as pf:
+        term_data = {}
+        for query_term in query_terms:
+            pf.seek_term(query_term)
+            while not pf.is_done():
+                doc_id, term_freq, term_pos = pf.read_entry()
+                doc_id_to_pos = term_data.get(query_term, {})
+                pos = doc_id_to_pos.get(doc_id, set())
+                pos.add(term_pos)
+                doc_id_to_pos[doc_id] = pos
+                term_data[query_term] = doc_id_to_pos
+    # print(f"term_data is {term_data}")
     
-    
-    # print(query_terms)
-    # for query_term in query_terms:
-    #     with PostingReader(postings_file, dictionary) as pf:
-    #         print(pf.seek_term(query_term))
+    # Basuri -> { 246400: [1, 500, 600], 246406: [444, 1123] }
+    # stopped -> { 246400: [501, 600]}
+    # her -> { 246400: [20, 502]}
+    # result -> { 246400: [1, 500, 600], 246406: [444, 1123] }
+
+    # "Basuri stopped her"
+    result: Dict[DocId, Set[TermPos]] = dict()
+    for i, query_term in enumerate(query_terms):
+        if i == 0:
+            result.update(term_data[query_term])
+            print(term_data[query_term][246400])
+        else:
+            # Find documents of the current query term which are present in the result
+            intersecting_docs = result.keys() & term_data[query_term].keys()
+            # Find documents which have gap of i
+            for doc_id in intersecting_docs:  # 246400
+                term_pos_of_doc_set = term_data[query_term][doc_id]  # 501, 600
+                # Subtract by i so that can use set intersection
+                shifted_term_pos_set = {term_pos - i for term_pos in term_pos_of_doc_set}  # 500, 599
+                # Intersect our existing document term pos set with the current term's shifted term pos set
+                # Store the results
+                result[doc_id] &= shifted_term_pos_set
+                if not result[doc_id]:  # if empty set,
+                    result.pop(doc_id)  # delete from result
+
+    result_docs: List[DocId] = list(result.keys())
+    print("RESULT DOCS", result_docs)
 
     N = len(docs_len_dct)
 
