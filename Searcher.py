@@ -1,6 +1,6 @@
 from InputOutput import PostingReader
 from QueryRefinement import run_rocchio
-from math import log10
+from math import log10, sqrt
 from typing import List
 from Types import *
 
@@ -37,7 +37,8 @@ def search_query(query: List[Term],
 
     # REFINE QUERY VECTOR W/ ROCCHIO ALGO
     if Config.RUN_ROCCHIO:
-        query_vector = run_rocchio(Config.ALPHA, Config.BETA, champion_dct, relevant_docs, query_vector)
+        query_vector = run_rocchio(
+            Config.ALPHA, Config.BETA, champion_dct, relevant_docs, query_vector)
 
     # CALCULATE DOCUMENT VECTOR
     doc_vector_dct: Dict[DocId, Vector]
@@ -84,6 +85,92 @@ def calc_query_vector(postings_file: str,
                 term, query_terms, n, pf)
 
     return query_vector
+
+def boolean_and(listA: List[DocId], listB: List[DocId]):
+    """
+    And operation to find intersect between two lists WITHOUT skip pointers
+    :param listA: list of IDs in first list
+    :param listB: list of IDs in second list
+    :return: list of IDs in both lists
+    """
+    return sorted(list(set(listA).intersection(set(listB))))
+
+# List[Tuple[Term, TermWeight]
+
+
+def generate_SP(postings: List[DocId]) -> List[Tuple[DocId, SkipPointer]]:
+    """
+    Turns list into list of tuples with second element being the skip pointer
+
+    :param postings: list of document IDs e.g [1,2,3,4,5]
+    :return: list of tuple e.g [(1,3),(2,None),(3,5), (4,None), (5, None)]
+    """
+    root_of_len = int(sqrt(len(postings)))
+    for i in range(len(postings)):
+        if (not i % root_of_len and i + root_of_len < len(postings)):
+            postings[i] = (postings[i], i + root_of_len)
+        else:
+            postings[i] = (postings[i], None)
+    return postings
+
+
+def and_operator(listA: List[Tuple[DocId, SkipPointer]], listB: List[Tuple[DocId, SkipPointer]]) -> List[Tuple[DocId, SkipPointer]]:
+    """
+    And operation to find intersect between two lists
+    :param listA: list of IDs in first list
+    :param listB: list of IDs in second list
+    :return: list of tuple (IDs, SP) in both lists 
+    """
+    res = []
+    i = 0  # Pointer for listA
+    j = 0  # Pointer for listB
+
+    while (i < len(listA) and j < len(listB)):
+        # If in both list, append
+        if (listA[i][0] == listB[j][0]):
+            res.append(listA[i][0])
+            i += 1
+            j += 1
+        elif (listA[i][0] < listB[j][0]):
+            # Use skip pointers if possible
+            if (listA[i][1] is not None):
+                skip_pointer = listA[i][1]
+                if (listA[skip_pointer][0] <= listB[j][0]):
+                    i = skip_pointer
+                else:
+                    i += 1
+            else:
+                i += 1
+
+        # Case of listA[i][0] > listB[j][0]
+        else:
+            # Use skip pointers whenever possible
+            if (listB[j][1] is not None):
+                skip_pointer = listB[j][1]
+                if (listB[skip_pointer][0] <= listA[i][0]):
+                    j = skip_pointer
+                else:
+                    j += 1
+            else:
+                j += 1
+    return generate_SP(res)
+
+
+def getSubList(listOfTuple: List[Tuple[DocId, SkipPointer]], index: int) -> List[DocId]:
+    """
+    Extract list from list of tuple
+
+    :param postings: list of tuple e.g [(1,3),(2,None),(3,5), (4,None), (5, None)]
+    :param index: index at which u want to get the element from
+    :return: list e.g [1,2,3,4,5]
+    """
+    if (not len(listOfTuple)):
+        return []
+
+    if (type(listOfTuple[0]) is not tuple):
+        return listOfTuple
+
+    return list(zip(*listOfTuple))[index]
 
 
 def calc_doc_vectors(postings_file: str,
