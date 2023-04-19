@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 from typing import List, Set
 from Types import *
+from nltk.corpus import wordnet
 
 # QUERY REFINEMENT
 # Includes both query expansion and relevance feedback
@@ -54,17 +55,21 @@ def run_rocchio(alpha: float,
     return query_vector
 
 
-def expand_query(tokens: List[str],
-                 thesaurus: Dict[str, Set[str]]) -> List[str]:
+def expand_query(query: str,
+                 thesaurus: Dict[str, Set[str]]) -> str:
     """
     Expands a query token to include related terms using the given thesaurus.
-    :param tokens: List of tokens
+    :param query: The query string
     :param thesaurus: Thesaurus in dictionary form, with both key and value pre-stemmed
-    :return: A set of new tokens expanded from the input list
+    :return: A single string representing the expanded query
     """
-    result = set()
+    tokens = query.split()
+    synonyms = set(tokens)
     for token in tokens:
-        result.add(token)
+        for synset in wordnet.synsets(token):
+            for l in synset.lemma_names():
+                if "_" not in l:
+                    synonyms.add(l)
         for synonym in thesaurus.get(token, set()):
-            result.add(synonym)
-    return list(result)
+            synonyms.add(synonym)
+    return " ".join(synonyms)

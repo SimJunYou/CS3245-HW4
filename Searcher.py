@@ -35,10 +35,12 @@ def search_query(query: List[Term],
     query_vector: Vector
     query_vector = calc_query_vector(postings_file, dictionary, query_terms, N)
 
+    print("Before relevance feedback:", len(query_vector))
     # REFINE QUERY VECTOR W/ ROCCHIO ALGO
     if Config.RUN_ROCCHIO:
         query_vector = run_rocchio(
             Config.ALPHA, Config.BETA, champion_dct, relevant_docs, query_vector)
+    print("After relevance feedback:", len(query_vector))
 
     # CALCULATE DOCUMENT VECTOR
     doc_vector_dct: Dict[DocId, Vector]
@@ -61,6 +63,12 @@ def search_query(query: List[Term],
     doc_scores = sorted(doc_scores, key=lambda x: x[0])
     doc_scores = sorted(doc_scores, key=lambda x: x[1], reverse=True)
 
+    # rough heuristic -- since our relevance feedback is weighted so strongly against our query,
+    # it is likely that relevant documents will be found higher in our output
+    # we can cut our large amount of predictions by approximately half
+    # doc_scores = doc_scores[:len(doc_scores) // 2]
+
+    print("Num docs found:", len(doc_scores))
     return [x[0] for x in doc_scores]  # we only want to keep the doc IDs!
 
 
@@ -85,6 +93,7 @@ def calc_query_vector(postings_file: str,
                 term, query_terms, n, pf)
 
     return query_vector
+
 
 def boolean_and(listA: List[DocId], listB: List[DocId]):
     """
@@ -250,10 +259,13 @@ def get_doc_tfidf_dict(term: str,
     pf.seek_term(term)
 
     weight_dct: Dict[DocId, float] = dict()
+    prev_doc = 0
     while pf.get_num_docs_remaining() > 0:
-        doc_id, term_freq, _ = pf.read_next_doc()
-        # since we read directly from posting list,
-        # term freq will never be 0, so we can ignore that case
-        weight_dct[doc_id] = 1 + log10(term_freq)
+        doc_id, term_freq, _ = pf.read_entry()
+        if doc_id != prev_doc:
+            # since we read directly from posting list,
+            # term freq will never be 0, so we can ignore that case
+            weight_dct[doc_id] = 1 + log10(term_freq)
+            prev_doc = doc_id
 
     return weight_dct

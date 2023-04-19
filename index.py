@@ -4,7 +4,9 @@ from __future__ import annotations
 import getopt
 import sys
 from math import log10
-from typing import  List
+from typing import List
+import multiprocessing
+import functools
 
 # SELF-WRITTEN MODULES
 from InputOutput import write_block
@@ -37,7 +39,6 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
     term_info_generator: TermInfoTupleGenerator = make_doc_read_generator(in_file, Config.STOP_WORDS_FILE)
     while True:
         generated = next(term_info_generator)
-
         # if we have run out of terms, we stop building index
         has_no_more_terms = all([x is None for x in generated])
         if has_no_more_terms:
@@ -84,11 +85,37 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
     # CALCULATE TOP K SIGNIFICANT TERMS FOR EACH DOCUMENT
     N = len(docs_len_dct)  # total number of docs
 
-    top_K_terms_dct: Dict[DocId, List[Tuple[Term, TermWeight]]] = {}
+    chunk_size = 5000
+    params = [(max(i-chunk_size, 0), i) for i in range(chunk_size, len(docs_len_dct)+chunk_size, chunk_size)]
 
-    for doc_id in docs_len_dct:
+    with multiprocessing.Pool(processes=4) as pool:
+        make_champion_list_chunk_partial = functools.partial(make_champion_list_chunk, N, docs_len_dct, dictionary)
+        results = pool.starmap(make_champion_list_chunk_partial, params)
+
+    champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]] = {}
+    for champion_dct_chunk in results:
+        champion_dct.update(champion_dct_chunk)
+
+    # we write the final posting list and dictionary to disk
+    # write positional indices
+    write_block(dictionary,
+                docs_len_dct,
+                champion_dct,
+                out_dict,
+                out_postings,
+                Config.LENGTHS_FILE,
+                Config.CHAMPION_FILE,
+                Config.WRITE_POS)
+
+
+def make_champion_list_chunk(N, docs_len_dct, dictionary, start, end):
+    print("Working on chunk", start, end)
+    champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]] = {}
+    for i, doc_id in enumerate(list(docs_len_dct.keys())[start:end]):
+        if i > 0 and i % 100 == 0:
+            print(f"chunk [{start}:{end}] progress -> {i}/{end-start}")
         term_weight_list: List[Tuple[Term, TermWeight]] = []
-        for term in dictionary:  
+        for term in dictionary:
             if doc_id in dictionary[term]:
                 if Config.WRITE_POS:
                     term_freq = len(dictionary[term][doc_id])
@@ -100,18 +127,9 @@ def build_index(in_file: str, out_dict: str, out_postings: str) -> None:
                 term_weight_list.append((term, term_weight))
         # sort by descending weights and keep top K
         term_weight_list = sorted(term_weight_list, key=lambda x: -x[1])[:Config.K]
-        top_K_terms_dct[doc_id] = term_weight_list
-
-    # we write the final posting list and dictionary to disk
-    # write positional indices
-    write_block(dictionary,
-                docs_len_dct,
-                top_K_terms_dct,
-                out_dict,
-                out_postings,
-                Config.LENGTHS_FILE,
-                Config.CHAMPION_FILE,
-                Config.WRITE_POS)
+        champion_dct[doc_id] = term_weight_list
+    print(f"chunk [{start}:{end}] done!")
+    return champion_dct
 
 
 def usage():
@@ -122,30 +140,31 @@ def usage():
     )
 
 
-input_directory = output_file_dictionary = output_file_postings = output_file_lengths = None
+if __name__ == "__main__":
+    input_directory = output_file_dictionary = output_file_postings = output_file_lengths = None
 
-try:
-    opts, args = getopt.getopt(sys.argv[1:], "i:d:p:")
-except getopt.GetoptError:
-    usage()
-    sys.exit(2)
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "i:d:p:")
+    except getopt.GetoptError:
+        usage()
+        sys.exit(2)
 
-for o, a in opts:
-    if o == "-i":  # input directory
-        input_directory = a
-    elif o == "-d":  # dictionary file
-        output_file_dictionary = a
-    elif o == "-p":  # postings file
-        output_file_postings = a
-    else:
-        assert False, "unhandled option"
+    for o, a in opts:
+        if o == "-i":  # input directory
+            input_directory = a
+        elif o == "-d":  # dictionary file
+            output_file_dictionary = a
+        elif o == "-p":  # postings file
+            output_file_postings = a
+        else:
+            assert False, "unhandled option"
 
-if (
-        input_directory is None
-        or output_file_postings is None
-        or output_file_dictionary is None
-):
-    usage()
-    sys.exit(2)
+    if (
+            input_directory is None
+            or output_file_postings is None
+            or output_file_dictionary is None
+    ):
+        usage()
+        sys.exit(2)
 
-build_index(input_directory, output_file_dictionary, output_file_postings)
+    build_index(input_directory, output_file_dictionary, output_file_postings)

@@ -119,9 +119,9 @@ def create_zones(tokens: List[Term], court: str) -> List[Term]:
     
     # find number of words for that specific court
     section_num_words = court_field['num_words']
-    keywords = court_field['section'].split(', ')
-    parties = court_field['parties'].split(', ')
+    section_keywords = [STEMMER.stem(tok) for tok in court_field['section'].split(', ')]
     parties_num_words = court_field['parties_num_words']
+    parties_keywords = [STEMMER.stem(tok) for tok in court_field['parties'].split(', ')]
     
     term_list = []
     
@@ -130,9 +130,9 @@ def create_zones(tokens: List[Term], court: str) -> List[Term]:
     remaining_parties = 0
     for tok in tokens:
         if remaining_section == 0 and remaining_parties == 0:
-            if tok in keywords:
+            if tok in section_keywords:
                 remaining_section = section_num_words
-            elif tok in parties:
+            elif tok in parties_keywords:
                 remaining_parties = parties_num_words
         if remaining_section:
             remaining_section -= 1

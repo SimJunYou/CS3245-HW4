@@ -67,10 +67,12 @@ class PostingReader:
         byte: int
         new_int: int = 0
         bits: int = 0
+        counter = 0
         while True:
             byte = int.from_bytes(self._f.read(1), sys.byteorder)
-            if byte > 128:
-                new_int += (byte % 128) << bits
+            counter += 1
+            if byte >= 128:
+                new_int += (byte % 128) * 2**bits
                 return new_int
             else:
                 new_int += byte << bits
@@ -210,8 +212,7 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
 
         for term, posting_list in dictionary.items():
             posting_list_serialized: bytes
-            posting_list_serialized = serialize_posting(posting_list, write_pos)
-
+            posting_list_serialized = serialize_posting(term, posting_list, write_pos)
             # cumulative_ptr stores the number of bytes from the start of the file to the current entry
             # this lets us seek directly to the entry of the term we want
             final_dict[term] = cumulative_ptr
@@ -225,7 +226,7 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
     print(f"Wrote {len(dictionary)} terms into final files")
 
 
-def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
+def serialize_posting(term, posting_list: Dict[DocId, List[TermPos]],
                       write_pos: bool) -> bytes:
     """
     Turns a posting list into a bytearray, and returns the bytearray.
@@ -266,10 +267,10 @@ def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
     # add in the header as described in the docstring
     header = [doc_freq]
     final_entries = header + prepared_entries
-
     # variable-byte encode everything in the list of final entries, then return the bytearray
     serialized_list = map(variable_byte_encode, final_entries)
-    return b"".join(serialized_list)  # flatten (using different method for an iterable of bytearrays)
+    out = list(serialized_list)
+    return b"".join(out)  # flatten (using different method for an iterable of bytearrays)
 
 
 def prepare_entry(doc_id: DocId, term_pos_list: List[TermPos]) -> List[int]:
@@ -310,6 +311,8 @@ def variable_byte_encode(num: int) -> bytes:
     :param num: The number to be encoded
     :return: The encoded number in byte format
     """
+    if num == 0:
+        return int(128).to_bytes(1, sys.byteorder)
     new_num = 0
     byte_count = 0
     while num > 0:

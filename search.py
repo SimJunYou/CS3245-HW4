@@ -23,7 +23,6 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
     relevant_docs: List[DocId] = []
     with open(queries_file, "r") as qf:
         query = qf.readline()
-        query_tokens = tokenize_query(query)
         while relevant_doc := qf.readline().strip():
             relevant_docs.append(int(relevant_doc))
 
@@ -32,11 +31,15 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
     if Config.RUN_QUERY_EXPANSION:
         with open(Config.THESAURUS_FILENAME, "rb") as tf:
             thesaurus = pickle.load(tf)
-        query_tokens = expand_query(query_tokens, thesaurus)
+        query = expand_query(query, thesaurus)
+    query_tokens = tokenize_query(query)
 
     # we need to tag our query tokens with the zones
     # temp solution:
-    query_tokens = ["content@" + tok for tok in query_tokens]
+    new_query_tokens = []
+    for tag in ("content@", "title@", "section@", "parties@"):
+        new_query_tokens += [tag + tok for tok in query_tokens]
+    query_tokens = new_query_tokens
 
     pointer_dct: Dict[Term, int]
     docs_len: Dict[DocId, DocLength]
@@ -56,9 +59,15 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
                                  postings_file,
                                  relevant_docs,
                                  champion_dct)
-    
+    true_pos = sum([rd in search_output for rd in relevant_docs])
+    precision = true_pos / len(search_output)
+    recall = true_pos / len(relevant_docs)
+    f2_score = 5 * (precision * recall) / (4*precision + recall)
+
     output = " ".join(map(str, search_output))
-    print(output, relevant_docs)
+    print("Docs found:", len(search_output), "Relevant docs:", relevant_docs)
+    print("Positions of results:", [1+search_output.index(rd) for rd in relevant_docs])
+    print(f"Precision: {precision}, Recall: {recall}, F2: {f2_score}")
     with open(results_file, "w") as rf:
         rf.write(output)
 
