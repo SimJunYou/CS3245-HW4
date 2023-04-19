@@ -19,8 +19,8 @@ THESAURUS_FILENAME: str = "stemmed_thesaurus.pickle"
 
 # RELEVANCE FEEDBACK
 RUN_ROCCHIO: bool = True
-ALPHA: float = 0.01  # since we did a lot of query expansion, our search output is not likely to be that accurate
-BETA: float = 10.0   # so we weigh more strongly towards the relevant documents
+ALPHA: float = 1.  # since we did a lot of query expansion, our search output is not likely to be that accurate
+BETA: float = 10.   # so we weigh more strongly towards the relevant documents
 
 # CONTENT PARSING
 PARSING_CONFIG = {

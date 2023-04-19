@@ -124,15 +124,15 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
                                               relevant_docs,
                                               champion_dct)
 
-    # true_pos = sum([rd in search_output for rd in relevant_docs])
-    # precision = true_pos / len(search_output)
-    # recall = true_pos / len(relevant_docs)
-    # f2_score = 5 * (precision * recall) / (4*precision + recall)
+    true_pos = sum([rd in search_output for rd in relevant_docs])
+    precision = true_pos / len(search_output)
+    recall = true_pos / len(relevant_docs)
+    f2_score = 5 * (precision * recall) / (4*precision + recall)
 
     output = " ".join(map(str, search_output))
     print("Docs found:", len(search_output), "Relevant docs:", relevant_docs)
-    # print("Positions of results:", [1+search_output.index(rd) for rd in relevant_docs])
-    # print(f"Precision: {precision}, Recall: {recall}, F2: {f2_score}")
+    print("Positions of results:", [1+search_output.index(rd) for rd in relevant_docs])
+    print(f"Precision: {precision}, Recall: {recall}, F2: {f2_score}")
     with open(results_file, "w") as rf:
         rf.write(output)
 
