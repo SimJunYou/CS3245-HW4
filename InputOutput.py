@@ -78,23 +78,6 @@ class PostingReader:
                 new_int += byte << bits
                 bits += 7
 
-    def read_next_doc(self) -> Tuple[DocId, TermFreq, TermPos]:
-        """
-        Seek to the next document in the current posting list, discarding all read values in between.
-        Returns the first set of values from the next document
-        :return: Same tuple as read_entry would return
-        """
-        assert self._remaining_docs > 0, "No next document!"
-
-        curr_doc: DocId = self._current_doc
-        term_freq: TermFreq
-        term_pos: TermPos
-        term_freq = term_pos = 0
-        rem_docs = self._remaining_docs
-        for _ in range(rem_docs):
-            curr_doc, term_freq, term_pos = self.read_entry()
-        return curr_doc, term_freq, term_pos
-
     def read_entry(self) -> Tuple[DocId, TermFreq, TermPos]:
         """
         Using the current position of the instance's file pointer,

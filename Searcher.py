@@ -1,70 +1,123 @@
+from __future__ import annotations
+
 from InputOutput import PostingReader
 from QueryRefinement import run_rocchio
-from math import log10, sqrt
+from math import log10
 from typing import List, Set
 from Types import *
 
 import Config
 
-def search_phrasal_query(phrasal_query: str,
-                         dictionary: Dict[Term, int],
+
+def search_boolean_query(query_tokens: List[str],
+                         pointer_dct: Dict[Term, int],
                          postings_file: str) -> List[DocId]:
     """
-    Using the PostingReader interface, process a given query by calculating
-    scores for each document from its posting list, then return at most 10
-    document IDs with the highest scores.
+    Perform a boolean query based on the given query tokens.
+    Return a list of relevant document IDs.
+    :param query_tokens: List of query tokens
+    :param pointer_dct: Dictionary of term -> postings list pointer
+    :param postings_file: Name of the postings list file
+    :return: List of relevant document IDs
+    """
+
+    subqueries = [subquery for subquery in query_tokens if not subquery == 'AND']
+    all_search_outputs: List[DocId] = []
+    for subquery in subqueries:
+        # PERFORM PHRASAL QUERY SEARCH FOR CURRENT SUBQUERY
+        if " " in subquery:  # MULTI-WORD PHRASAL QUERY
+            intermediate_search_outputs = search_phrasal_query(subquery, pointer_dct, postings_file)
+        else:  # SINGLE WORD PHRASAL QUERY
+            query_word = subquery
+            posting_list = {}
+            for zone in ("content@", "title@", "court@", "parties@", "section@"):
+                temp_word = zone + query_word
+                if temp_word in pointer_dct:
+                    posting_list.update(get_posting_list(postings_file, pointer_dct, temp_word))
+
+            if posting_list:  # if term exists in corpus,
+                intermediate_search_outputs = [doc_id for doc_id in posting_list.keys()]
+            else:  # if term does not exist in corpus,
+                intermediate_search_outputs = []
+
+        # EARLY TERMINATION
+        if not intermediate_search_outputs:
+            # if current subquery gives no results, terminate early
+            all_search_outputs = []
+            break
+
+        # INTERSECT WITH EXISTING RESULTS
+        if all_search_outputs:
+            intermediate_search_outputs = boolean_and(intermediate_search_outputs, all_search_outputs)
+            if not intermediate_search_outputs:
+                # early termination condition #2 -- if intersect yields nothing
+                all_search_outputs = []
+                break
+        else:
+            all_search_outputs += intermediate_search_outputs
+
+    return all_search_outputs
+
+
+def search_phrasal_query(phrasal_query: str,
+                         pointer_dct: Dict[Term, int],
+                         postings_file: str) -> List[DocId]:
+    """
+    Using the PostingReader interface, process a given phrasal query by getting each term's
+    posting list and intersecting the positional indices.
     :param phrasal_query: The phrase query to search
-    :param dictionary: A dictionary of terms to their positions in the postings list
+    :param pointer_dct: A dictionary of terms -> postings list pointer
     :param postings_file: The name of the postings list file
     :return: A list of relevant document IDs
     """
+
+    # NOTE! Phrasal queries will come as a single string, so we need to split it
+    # Also, phrasal query terms will contain NO ZONES! They will be temporarily added later
     phrasal_query = phrasal_query.split()
 
-    with PostingReader(postings_file, dictionary) as pf:
+    with PostingReader(postings_file, pointer_dct) as pf:
         term_data = {}
         for query_term in phrasal_query:
+            # we temporarily add zone tags just to extract the relevant posting lists
+            # for example, posting list for "content@test", "title@test", ... will be
+            # condensed into a single posting list and saved in term_data
             for zone in ("content@", "title@", "court@", "parties@", "section@"):
                 temp_term = zone + query_term
-                if temp_term not in dictionary:
+                if temp_term not in pointer_dct:
                     continue
                 pf.seek_term(temp_term)
                 while not pf.is_done():
                     doc_id, _, term_pos = pf.read_entry()
                     doc_id_to_pos = term_data.get(query_term, {})
-                    pos = doc_id_to_pos.get(doc_id, set())
-                    pos.add(term_pos)
-                    doc_id_to_pos[doc_id] = pos
+                    term_pos_set = doc_id_to_pos.get(doc_id, set())
+                    term_pos_set.add(term_pos)
+                    doc_id_to_pos[doc_id] = term_pos_set
                     term_data[query_term] = doc_id_to_pos
 
-    # Basuri -> { 246400: [1, 500, 600], 246406: [444, 1123] }
-    # stopped -> { 246400: [501, 600]}
-    # her -> { 246400: [20, 502]}
-    # result -> { 246400: [1, 500, 600], 246406: [444, 1123] }
-
+    # INTERSECTION OF POSITIONAL INDICES
     result: Dict[DocId, Set[TermPos]] = dict()
     for i, query_term in enumerate(phrasal_query):
-        if query_term not in term_data:  # query term is a stop word
+        if query_term not in term_data:  # if either term not in corpus or term is a stop word, skip
             continue
         if not result:  # if initializing result
             result.update(term_data[query_term])
         else:
-            # Find documents of the current query term which are present in the result
+            # find documents of the current query term which are present in the result
             intersecting_docs = result.keys() & term_data[query_term].keys()
-            # Find documents which have gap of i
-            
+            # find documents which have gap of i
             new_result = {}
             for doc_id in intersecting_docs:
                 term_pos_of_doc_set = term_data[query_term][doc_id]
-                # Subtract by i so that can use set intersection
+                # subtract all term pos by i so that can we use set intersection
                 shifted_term_pos_set = {term_pos - i for term_pos in term_pos_of_doc_set}
-                # Intersect our existing document term pos set with the current term's shifted term pos set
-                # Store the results
+                # intersect our existing document term pos set with the current term's shifted term pos set
+                # then, store the results
                 new_term_pos_set = result[doc_id] & shifted_term_pos_set
-                if new_term_pos_set:  # if it is not empty,
+                if new_term_pos_set:  # if the intersection with the new doc is not empty, write it to new_results
                     new_result[doc_id] = new_term_pos_set
             result = new_result
-            
-    print("Result", result)
+
+    # We only want the document IDs to be returned
     result_docs: List[DocId] = list(result.keys())
     return result_docs
 
@@ -77,10 +130,9 @@ def search_freetext_query(query_tokens: List[Term],
                           champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]]
                           ) -> List[DocId]:
     """
-    Using the PostingReader interface, process a given query by calculating
-    scores for each document from its posting list, then return at most 10
-    document IDs with the highest scores.
-    :param free_query: The free text query as a list of tokens
+    Using the PostingReader interface, process a given free text query by calculating scores
+    for each document from its posting list, then returning the documents with the highest scores.
+    :param query_tokens: The free text query as a list of tokens
     :param dictionary: A dictionary of terms to their positions in the postings list
     :param docs_len_dct: A dictionary of doc ID to doc length
     :param postings_file: The name of the postings list file
@@ -107,21 +159,21 @@ def search_freetext_query(query_tokens: List[Term],
     doc_vector_dct: Dict[DocId, Vector]
     doc_vector_dct = calc_doc_vectors(postings_file, dictionary, query_terms)
 
+    # ADDING WEIGHTS TO ZONES
     def apply_weights_to_vector(vct: Vector) -> Vector:
         for term in vct:
-            if term.startswith("title"):
+            if term.startswith("title"):  # titles should be boosted, since they are a central part of a document
                 vct[term] *= 1.0
             elif term.startswith("content"):
                 vct[term] *= 0.8
-            elif term.startswith("section"):
+            elif term.startswith("section"):  # other sections can be ranked lower than the content itself
                 vct[term] *= 0.6
-            elif term.startswith("parties"):
+            elif term.startswith("parties"):  # this ranking is arbitrary
                 vct[term] *= 0.4
             elif term.startswith("court"):
                 vct[term] *= 0.2
         return vct
 
-    # Adding weights to individual zones
     for docID, vector in doc_vector_dct.items():
         doc_vector_dct[docID] = apply_weights_to_vector(vector)
     query_vector = apply_weights_to_vector(query_vector)
@@ -152,13 +204,15 @@ def search_freetext_query(query_tokens: List[Term],
     return [x[0] for x in doc_scores]  # we only want to keep the doc IDs!
 
 
-def get_posting_list(postings_file, dictionary, query_term) -> Dict[DocId, Set[TermPos]]:
+def get_posting_list(postings_file, pointer_dct, query_term) -> Dict[DocId, Set[TermPos]]:
     """
     Gets the posting list of a single term from the postings list file as a dictionary.
-    :param whatever: ...
-    TODO
+    :param postings_file: The name of the posting file
+    :param pointer_dct: The dictionary of term -> postings file pointer
+    :param query_term: The term to retrieve the posting list of
+    :return: Posting list as a dictionary of doc ID to a set of term positions
     """
-    with PostingReader(postings_file, dictionary) as pf:
+    with PostingReader(postings_file, pointer_dct) as pf:
         pf.seek_term(query_term)
         doc_id_to_pos = {}
         while not pf.is_done():
@@ -169,23 +223,51 @@ def get_posting_list(postings_file, dictionary, query_term) -> Dict[DocId, Set[T
     return doc_id_to_pos
 
 
+def boolean_and(lst_1: List[DocId], lst_2: List[DocId]):
+    """
+    And operation to find intersect between two lists WITHOUT skip pointers
+    :param lst_1: list of IDs in first list
+    :param lst_2: list of IDs in second list
+    :return: list of IDs in both lists
+    """
+    return sorted(list(set(lst_1).intersection(set(lst_2))))
+
+
+# TODO: Do we need this function?
+# def get_sub_list(list_of_tuple: List[Tuple[DocId, int]] | List[DocId], index: int) -> List[DocId]:
+#     """
+#     Extract list from list of tuple
+#
+#     :param list_of_tuple: List of tuple, e.g. [(1,3), (2,None), (3,5), (4,None), (5, None)]
+#     :param index: Index at which you want to get the element from
+#     :return: list e.g [1, 2, 3, 4, 5]
+#     """
+#
+#     if not len(list_of_tuple):
+#         return []
+#
+#     if type(list_of_tuple[0]) is not tuple:
+#         return list_of_tuple
+#
+#     return list(zip(*list_of_tuple))[index]
+
 
 def calc_query_vector(postings_file: str,
-                      dictionary: Dict[Term, int],
+                      pointer_dct: Dict[Term, int],
                       query_terms: List[str],
                       n: int) -> Vector:
     """
     Calculates a query vector based on given query terms.
     Query vector will be in the form of a dictionary of term -> weight.
     :param postings_file: The name of the postings file
-    :param dictionary: The dictionary of term -> postings file pointer
+    :param pointer_dct: The dictionary of term -> postings file pointer
     :param query_terms: The list of query terms
     :param n: The total number of documents
     :return: The query vector
     """
     query_vector: Vector = dict()
 
-    with PostingReader(postings_file, dictionary) as pf:
+    with PostingReader(postings_file, pointer_dct) as pf:
         for term in query_terms:
             query_vector[term] = calc_query_tfidf(
                 term, query_terms, n, pf)
@@ -193,48 +275,21 @@ def calc_query_vector(postings_file: str,
     return query_vector
 
 
-def boolean_and(listA: List[DocId], listB: List[DocId]):
-    """
-    And operation to find intersect between two lists WITHOUT skip pointers
-    :param listA: list of IDs in first list
-    :param listB: list of IDs in second list
-    :return: list of IDs in both lists
-    """
-    return sorted(list(set(listA).intersection(set(listB))))
-
-
-def getSubList(listOfTuple: List[Tuple[DocId, int]], index: int) -> List[DocId]:
-    """
-    Extract list from list of tuple
-
-    :param postings: list of tuple e.g [(1,3),(2,None),(3,5), (4,None), (5, None)]
-    :param index: index at which u want to get the element from
-    :return: list e.g [1,2,3,4,5]
-    """
-    if not len(listOfTuple):
-        return []
-
-    if type(listOfTuple[0]) is not tuple:
-        return listOfTuple
-
-    return list(zip(*listOfTuple))[index]
-
-
 def calc_doc_vectors(postings_file: str,
-                     dictionary: Dict[Term, int],
+                     pointer_dct: Dict[Term, int],
                      query_terms: List[str]) -> Dict[DocId, Vector]:
     """
     Calculates a doc vectors based on given query terms.
     Document vectors will be in the form of a dictionary of (doc ID, term) -> weight.
     :param postings_file: The name of the postings file
-    :param dictionary: The dictionary of term -> postings file pointer
+    :param pointer_dct: The dictionary of term -> postings file pointer
     :param query_terms: The set of query terms
     :return: The document vector dictionary
     """
     doc_score_dct: Dict[Term, Dict[DocId, TermWeight]] = dict()
     doc_vector_dct: Dict[DocId, Vector]
 
-    with PostingReader(postings_file, dictionary) as pf:
+    with PostingReader(postings_file, pointer_dct) as pf:
         for query_term in query_terms:
             doc_score_dct[query_term] = get_doc_tfidf_dict(query_term, pf)
 

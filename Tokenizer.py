@@ -125,7 +125,9 @@ def create_zones(tokens: List[Term], court: str) -> List[Term]:
     
     term_list = []
     
-    # check all tokens for key word
+    # go through each token and tag it!
+    # upon encountering a token that's in either keyword set, start a run of
+    # "section@" or "parties@" tagging for the specified duration
     remaining_section = 0
     remaining_parties = 0
     for tok in tokens:
@@ -158,11 +160,10 @@ def clean_query_token(token: str) -> str:
 def tokenize_query(query: str) -> List[str]:
     """
     Takes in a string and performs tokenization, stemming and case-folding.
-    If the string contains a phrasal query (terms enclosed by ""), then
-    leave it as a single token with the terms within it stemmed. If
-    the token is AND/OR, then leave it as is
-    :param query: the string to process
-    :return: a list of processed tokens
+    If the string contains a phrasal query (terms enclosed by ""), then leave it as a single
+    token with the terms within it stemmed. If the token is AND/OR, then leave it as is.
+    :param query: The string to process
+    :return: A list of processed tokens
     """
     tokenizer = nltk.RegexpTokenizer(r'\w+|\s+|"[^"]+"')
     tokens = tokenizer.tokenize(query)
