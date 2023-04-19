@@ -5,7 +5,7 @@ import argparse
 from typing import List
 from Tokenizer import tokenize_query
 from QueryRefinement import expand_query, tag_query_with_zones, extract_date
-from Searcher import search_query
+from Searcher import search_phrasal_query, boolean_and, search_freetext_query, get_posting_list
 from Types import *
 import Config
 
@@ -48,46 +48,81 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
 
     # handle case where it is a phrasal query and boolean query
     is_boolean_query = 'AND' in query_tokens
-    subqueries = [
-        subquery for subquery in query_tokens if not subquery == 'AND']
-    print("is_boolean", is_boolean_query)
-    print("Subqueries", subqueries)
+    print("IS BOOLEAN QUERY", is_boolean_query)
 
     # HANDLE BOOLEAN QUERY
     if is_boolean_query:
-        ...
+        intermediate_search_outputs = []
+        subqueries = [subquery for subquery in query_tokens if not subquery == 'AND']
 
+        print("SUBQUERIES", subqueries)
+        all_search_outputs: List[List[DocId]] = []
+        subquery: List[str]
+
+        for subquery in subqueries:
+            if " " in subquery:  # if subquery is phrasal,
+                intermediate_search_outputs = search_phrasal_query(subquery, pointer_dct, postings_file)
+            else:  # if the subquery is a single word, we use a simpler method
+                query_word = subquery
+                posting_list = {}
+                for zone in ("content@", "title@", "court@", "parties@", "section@"):
+                    temp_word = zone + query_word
+                    if temp_word in pointer_dct:
+                        posting_list.update(get_posting_list(postings_file, pointer_dct, temp_word))
+               
+                if posting_list:  # if term exists in corpus,
+                    intermediate_search_outputs = [doc_id for doc_id in posting_list.keys()]
+                else:  # if term does not exist in corpus,
+                    intermediate_search_outputs = []
+
+            if not intermediate_search_outputs:  # early termination
+                all_search_outputs = []
+                break
+            
+            if all_search_outputs:  # if not empty, intersect
+                intermediate_search_outputs = boolean_and(
+                    intermediate_search_outputs, all_search_outputs)
+                # In case after 1 intersection, there is an empty list
+                if not intermediate_search_outputs:
+                    all_search_outputs = []
+                    break
+            else:
+                all_search_outputs += intermediate_search_outputs
+
+        search_output = all_search_outputs
+    
     # HANDLE FREE TEXT QUERY
     else:
         print("Query tokens before expansion:", query_tokens)
 
-        free_text = [tok for tok in query_tokens if ' ' not in tok]
-        phrasal_queries = [tok for tok in query_tokens if ' ' in tok]
+        # CONVERT PHRASAL QUERIES INTO FREE TEXT :(
+        all_tokens = []
+        for tok in query_tokens:
+            if ' ' in tok:
+                all_tokens += tok.split()
+            else:
+                all_tokens += [tok]
 
         # QUERY EXPANSION (only for free text queries)
         if Config.RUN_QUERY_EXPANSION:
             with open(Config.THESAURUS_FILENAME, "rb") as tf:
                 thesaurus = pickle.load(tf)
-            free_text = expand_query(free_text, thesaurus)
+            all_tokens = expand_query(all_tokens, thesaurus)
 
         # TAGGING QUERY WITH ZONES
-        free_text = tag_query_with_zones(free_text)
-        free_text += ["date@" + date for date in extracted_dates]
+        all_tokens = sum(tag_query_with_zones(all_tokens), [])  # flatten list
+        all_tokens += ["date@" + date for date in extracted_dates]
 
-        for i in range(len(phrasal_queries)):
-            phrasal_queries[i] = ' '.join(tag_query_with_zones(phrasal_queries[i].split()))
-        query_tokens = free_text + phrasal_queries
-        print("Query tokens after expansion:", query_tokens)
+        print("Query tokens after expansion:", all_tokens)
 
         # SEARCHING
         search_output: List[DocId]
-        search_output = search_query(free_text,
-                                     phrasal_queries,
-                                     pointer_dct,
-                                     docs_len,
-                                     postings_file,
-                                     relevant_docs,
-                                     champion_dct)
+        search_output = search_freetext_query(all_tokens,
+                                              pointer_dct,
+                                              docs_len,
+                                              postings_file,
+                                              relevant_docs,
+                                              champion_dct)
 
     # true_pos = sum([rd in search_output for rd in relevant_docs])
     # precision = true_pos / len(search_output)

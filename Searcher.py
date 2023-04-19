@@ -6,21 +6,81 @@ from Types import *
 
 import Config
 
+def search_phrasal_query(phrasal_query: str,
+                         dictionary: Dict[Term, int],
+                         postings_file: str) -> List[DocId]:
+    """
+    Using the PostingReader interface, process a given query by calculating
+    scores for each document from its posting list, then return at most 10
+    document IDs with the highest scores.
+    :param phrasal_query: The phrase query to search
+    :param dictionary: A dictionary of terms to their positions in the postings list
+    :param postings_file: The name of the postings list file
+    :return: A list of relevant document IDs
+    """
+    phrasal_query = phrasal_query.split()
 
-def search_query(free_query: List[Term],
-                 phrasal_query: List[Term],
-                 dictionary: Dict[Term, int],
-                 docs_len_dct: Dict[DocId, DocLength],
-                 postings_file: str,
-                 relevant_docs: List[DocId],
-                 champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]]
-                 ) -> List[DocId]:
+    with PostingReader(postings_file, dictionary) as pf:
+        term_data = {}
+        for query_term in phrasal_query:
+            for zone in ("content@", "title@", "court@", "parties@", "section@"):
+                temp_term = zone + query_term
+                if temp_term not in dictionary:
+                    continue
+                pf.seek_term(temp_term)
+                while not pf.is_done():
+                    doc_id, _, term_pos = pf.read_entry()
+                    doc_id_to_pos = term_data.get(query_term, {})
+                    pos = doc_id_to_pos.get(doc_id, set())
+                    pos.add(term_pos)
+                    doc_id_to_pos[doc_id] = pos
+                    term_data[query_term] = doc_id_to_pos
+
+    # Basuri -> { 246400: [1, 500, 600], 246406: [444, 1123] }
+    # stopped -> { 246400: [501, 600]}
+    # her -> { 246400: [20, 502]}
+    # result -> { 246400: [1, 500, 600], 246406: [444, 1123] }
+
+    result: Dict[DocId, Set[TermPos]] = dict()
+    for i, query_term in enumerate(phrasal_query):
+        if query_term not in term_data or query_term is None:  # query term is a stop word
+            continue
+        if not result:  # if initializing result
+            result.update(term_data[query_term])
+        else:
+            # Find documents of the current query term which are present in the result
+            intersecting_docs = result.keys() & term_data[query_term].keys()
+            # Find documents which have gap of i
+            
+            new_result = {}
+            for doc_id in intersecting_docs:
+                term_pos_of_doc_set = term_data[query_term][doc_id]
+                # Subtract by i so that can use set intersection
+                shifted_term_pos_set = {term_pos - i for term_pos in term_pos_of_doc_set}
+                # Intersect our existing document term pos set with the current term's shifted term pos set
+                # Store the results
+                new_term_pos_set = result[doc_id] & shifted_term_pos_set
+                if new_term_pos_set:  # if it is not empty,
+                    new_result[doc_id] = new_term_pos_set
+            result = new_result
+            
+    print("Result", result)
+    result_docs: List[DocId] = list(result.keys())
+    return result_docs
+
+
+def search_freetext_query(query_tokens: List[Term],
+                          dictionary: Dict[Term, int],
+                          docs_len_dct: Dict[DocId, DocLength],
+                          postings_file: str,
+                          relevant_docs: List[DocId],
+                          champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]]
+                          ) -> List[DocId]:
     """
     Using the PostingReader interface, process a given query by calculating
     scores for each document from its posting list, then return at most 10
     document IDs with the highest scores.
     :param free_query: The free text query as a list of tokens
-    :param phrasal_query: The phrasal query as a list of tokens
     :param dictionary: A dictionary of terms to their positions in the postings list
     :param docs_len_dct: A dictionary of doc ID to doc length
     :param postings_file: The name of the postings list file
@@ -28,15 +88,11 @@ def search_query(free_query: List[Term],
     :param champion_dct: The champion list as a dictionary
     :return: A list of relevant document IDs
     """
-    free_text_terms = set(free_query)
-    dictionary_terms = set(dictionary.keys())
-    query_terms = list(free_text_terms & dictionary_terms)
-    N = len(docs_len_dct)
 
-    print(query_terms)
-    # query_terms -> a mix of free text and phrasal queries
-    for phrase in phrasal_query:
-        get_posting_list(postings_file, dictionary, phrasal_query)
+    all_query_terms = set(query_tokens)
+    dictionary_terms = set(dictionary.keys())
+    query_terms = list(all_query_terms & dictionary_terms)
+    N = len(docs_len_dct)
 
     # CALCULATE QUERY VECTOR
     query_vector: Vector
@@ -106,7 +162,7 @@ def get_posting_list(postings_file, dictionary, query_term) -> Dict[DocId, Set[T
         pf.seek_term(query_term)
         doc_id_to_pos = {}
         while not pf.is_done():
-            doc_id, term_freq, term_pos = pf.read_entry()
+            doc_id, _, term_pos = pf.read_entry()
             pos_set = doc_id_to_pos.get(doc_id, set())
             pos_set.add(term_pos)
             doc_id_to_pos[doc_id] = pos_set

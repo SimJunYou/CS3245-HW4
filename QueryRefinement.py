@@ -7,7 +7,6 @@ import dateutil.parser as parser
 # QUERY REFINEMENT
 # Includes both query expansion and relevance feedback
 
-
 def calc_centroid(champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]],
                   in_query_relevant_docs: List[DocId]) -> Vector:
     """
@@ -75,7 +74,7 @@ def expand_query(tokens: List[str],
     return list(synonyms)
 
 
-def tag_query_with_zones(tokens: List[str]) -> List[str]:
+def tag_query_with_zones(tokens: List[str]) -> List[List[str]]:
     """
     Tag each token with 5 zones, so we will have 5 versions of each token.
     :param tokens: List of tokens
@@ -87,8 +86,8 @@ def tag_query_with_zones(tokens: List[str]) -> List[str]:
     parties_query_tokens = ["parties@" + tok for tok in tokens]
     section_query_tokens = ["section@" + tok for tok in tokens]
 
-    return content_query_tokens + title_query_tokens + parties_query_tokens\
-          + section_query_tokens + court_query_tokens
+    return [content_query_tokens, title_query_tokens, parties_query_tokens,
+            section_query_tokens, court_query_tokens]
 
 
 def extract_date(query: str) -> List[str]:
