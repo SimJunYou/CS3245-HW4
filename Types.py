@@ -8,6 +8,7 @@ Term = str
 TermFreq = int
 TermPos = int
 TermWeight = float
+SkipPointer = int
 
 Vector = Dict[Term, TermWeight]
 
