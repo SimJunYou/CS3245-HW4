@@ -33,7 +33,7 @@ PARSING_CONFIG = {
     'NSW Supreme Court': {
         'section': 'penalty, act, force',
         'num_words': 15,
-        'parties': 'parties, witness, victims, appellent, ms, mr, offender,judgememt',
+        'parties': 'parties, witness, victims, appellent, ms, mr, offender, judgememt',
         'parties_num_words': 7
     },
     'CA Supreme Court': {
@@ -45,25 +45,25 @@ PARSING_CONFIG = {
     'NSW District Court': {
         'section': 'section, act',
         'num_words': 15,
-        'parties': 'parties, sir, mr, ms ,witness, victims, appellent',
+        'parties': 'parties, sir, mr, ms, witness, victims, appellent',
         'parties_num_words': 3
     },
     'SG High Court': {
         'section': 'section, act, case, number, crime, s, ss, CPC, penal, code',
         'num_words': 10,
-        'parties': 'parties, judge, counsel, name(s),coram',
+        'parties': 'parties, judge, counsel, name(s), coram',
         'parties_num_words': 5
     },
     'High Court of Australia': {
         'section': 'act, code, statutes',
         'num_words': 10,
-        'parties': 'parties, lawyer, high, court, australia, appellant, respondent,representation,intervener',
+        'parties': 'parties, lawyer, high, court, australia, appellant, respondent, representation, intervener',
         'parties_num_words': 10
     },
     'Federal Court of Australia': {
         'section': 'legislation, section, act, catchwords',
         'num_words': 10,
-        'parties': 'parties,judges,respondent,mr, ms',
+        'parties': 'parties, judges, respondent, mr, ms',
         'parties_num_words': 5
     },
     'SG Court of Appeal': {
@@ -81,7 +81,7 @@ PARSING_CONFIG = {
     'UK Crown Court': {
         'section': 'convict, act, charges, honourable',
         'num_words': 10,
-        'parties': 'mr, ms, applicant, counsel, victim, complainant,‐v‐',
+        'parties': 'mr, ms, applicant, counsel, victim, complainant, ‐v‐',
         'parties_num_words': 5        
     },
     'SG District Court'  :{
@@ -97,9 +97,27 @@ PARSING_CONFIG = {
         'parties_num_words': 4
     },
     'NSW Land and Environment Court': {
-        'section': 'apprehended, act, section',
+        'section': 'offence, section, repealed',
         'num_words': 10, # estimate number of words in a section
-        'parties': 'between, witness, before, honour, appellent, ms, mr, ‐v‐, respondent',
-        'parties_num_words': 4
-    }   
+        'parties': 'witness, council, appellent, ms, mr, defendant, respondent',
+        'parties_num_words': 5
+    },  
+    'UK High Court': {
+        'section': 'offence, section, repealed',
+        'num_words': 10, # estimate number of words in a section
+        'parties': 'witness, council, claimant, ms, mr, -v-, defendant',
+        'parties_num_words': 10
+    },   
+    'SG Privy Council': {
+        'section': 'section, act, case, number, crime, s, ss, CPC, penal, code',
+        'num_words': 10, # estimate number of words in a section
+        'parties': 'witness, sir, lord, ms, mr, parties, defendant, respondent, prosecutor',
+        'parties_num_words': 10
+    }, 
+    'Singapore International Commercial Court': {
+        'section': 'section, act, case, number, crime, s, ss, CPC, penal, code',
+        'num_words': 10,
+        'parties': 'parties, judge, counsel, coram, lord',
+        'parties_num_words': 5
+    }
 }
