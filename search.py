@@ -48,7 +48,6 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
 
     # handle case where it is a phrasal query and boolean query
     is_boolean_query = 'AND' in query_tokens
-    print("IS BOOLEAN QUERY", is_boolean_query)
 
     # HANDLE BOOLEAN QUERY
     if is_boolean_query:
@@ -93,7 +92,7 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
     # f2_score = 5 * (precision * recall) / (4*precision + recall)
 
     output = " ".join(map(str, search_output))
-    print("Docs found:", len(search_output), "Relevant docs:", relevant_docs)
+    print("Docs found:", len(search_output))
     # print("Positions of results:", [1+search_output.index(rd) for rd in relevant_docs])
     # print(f"Precision: {precision}, Recall: {recall}, F2: {f2_score}")
     with open(results_file, "w") as rf:
