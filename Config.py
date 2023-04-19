@@ -25,51 +25,81 @@ BETA: float = 0.75
 # CONTENT PARSING
 PARSING_CONFIG = {
     'NSW Court of Criminal Appeal': {
-        'section': 'section, act, case, number, s, crime',
-        'num_words': 10, # estimate number of words in a section
-        'parties': 'parties, witnesses, victims, appel, ms, mr',
+        'section': 'section, act',
+        'num_words': 15, # estimate number of words in a section
+        'parties': 'parties, witness, victims, appellent, ms, mr',
         'parties_num_words': 3
     },
     'NSW Supreme Court': {
-        'section': 'section, act, case, number, s, crime',
-        'num_words': 10,
-        'parties': 'parties, witnesses, victims, appel, ms, mr, offend',
-        'parties_num_words': 3
+        'section': 'penalty, act, force',
+        'num_words': 15,
+        'parties': 'parties, witness, victims, appellent, ms, mr, offender,judgememt',
+        'parties_num_words': 7
     },
     'CA Supreme Court': {
-        'section': 'section, act, case, number',
+        'section': 'section, act, sect',
         'num_words': 10,
-        'parties': 'parties, defendant, present, sir, plaintiff',
+        'parties': 'respondent, present, defendant, prosecutrix, prosecutor, sir, plaintiff, named, acquainted',
         'parties_num_words': 3
     },
     'NSW District Court': {
-        'section': 'section, act, case, number',
-        'num_words': 10,
-        'parties': 'parties, sir, mr',
+        'section': 'section, act',
+        'num_words': 15,
+        'parties': 'parties, sir, mr, ms ,witness, victims, appellent',
         'parties_num_words': 3
     },
     'SG High Court': {
-        'section': 'section, act, case, number, crime',
+        'section': 'section, act, case, number, crime, s, ss, CPC, penal, code',
         'num_words': 10,
-        'parties': 'parties, judge',
-        'parties_num_words': 3
+        'parties': 'parties, judge, counsel, name(s),coram',
+        'parties_num_words': 5
     },
     'High Court of Australia': {
-        'section': 'section, act, case, number',
+        'section': 'act, code, statutes',
         'num_words': 10,
-        'parties': 'parties, lawyer',
-        'parties_num_words': 3
+        'parties': 'parties, lawyer, high, court, australia, appellant, respondent,representation,intervener',
+        'parties_num_words': 10
     },
     'Federal Court of Australia': {
-        'section': 'section, act, case, number',
+        'section': 'legislation, section, act, catchwords',
         'num_words': 10,
-        'parties': 'parties',
-        'parties_num_words': 3
+        'parties': 'parties,judges,respondent,mr, ms',
+        'parties_num_words': 5
     },
-    'SG Court of Appeal  ': {
-        'section': 'section, act, case, number',
+    'SG Court of Appeal': {
+        'section': 'section, act, case, number, crime, s, ss, CPC, penal, code',
         'num_words': 10,
-        'parties': 'parties, judge, lawyer',
-        'parties_num_words': 3
-    }
+        'parties': 'parties, judge, counsel,coram',
+        'parties_num_words': 5
+    },
+    'NSW Court of Appeal': {
+        'section': 'section, act, charges, order',
+        'num_words': 15,
+        'parties': 'judgement, mr, ms, applicant, counsel, citation, complainant',
+        'parties_num_words': 5        
+    },
+    'UK Crown Court': {
+        'section': 'convict, act, charges, honourable',
+        'num_words': 10,
+        'parties': 'mr, ms, applicant, counsel, victim, complainant,‐v‐',
+        'parties_num_words': 5        
+    },
+    'SG District Court'  :{
+        'section': 'section, act, case, number, crime, s, ss, CPC, penal, code',
+        'num_words': 10,
+        'parties': 'parties, judge, counsel, name(s),coram, prosecutor, you, ms, mr',
+        'parties_num_words': 5
+    },
+    'UK Court of Appeal': {
+        'section': 'apprehended, act, section',
+        'num_words': 10, # estimate number of words in a section
+        'parties': 'between, witness, before, honour, appellent, ms, mr, ‐v‐, respondent',
+        'parties_num_words': 4
+    },
+    'NSW Land and Environment Court': {
+        'section': 'apprehended, act, section',
+        'num_words': 10, # estimate number of words in a section
+        'parties': 'between, witness, before, honour, appellent, ms, mr, ‐v‐, respondent',
+        'parties_num_words': 4
+    }   
 }
