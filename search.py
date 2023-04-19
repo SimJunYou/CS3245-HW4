@@ -4,7 +4,7 @@ import argparse
 
 from typing import List
 from Tokenizer import tokenize_query
-from QueryRefinement import expand_query
+from QueryRefinement import expand_query, tag_query_with_zones, extract_date
 from Searcher import search_query
 from Types import *
 import Config
@@ -23,20 +23,26 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
     relevant_docs: List[DocId] = []
     with open(queries_file, "r") as qf:
         query = qf.readline()
-        query_tokens = tokenize_query(query)
         while relevant_doc := qf.readline().strip():
             relevant_docs.append(int(relevant_doc))
+
+    # extract a single date from the query, if it exists
+    # otehrwise, extracted_dates will be an empty list
+    extracted_dates: List[str] = extract_date(query)
+
+    # tokenize the query
+    query_tokens = tokenize_query(query)
 
     # if we are doing query expansion, we expand the query using
     # our thesaurus prebuilt from a legal text corpus
     if Config.RUN_QUERY_EXPANSION:
         with open(Config.THESAURUS_FILENAME, "rb") as tf:
             thesaurus = pickle.load(tf)
-        query_tokens = expand_query(query_tokens, thesaurus)
+        query_tokens = expand_query(query_tokens, thesaurus)  # must be tokenized, without zones
 
-    # we need to tag our query tokens with the zones
-    # temp solution:
-    query_tokens = ["content@" + tok for tok in query_tokens]
+    # tag zones! add in date extracted previously as well
+    query_tokens = tag_query_with_zones(query_tokens)
+    query_tokens += ["date@" + date for date in extracted_dates]
 
     pointer_dct: Dict[Term, int]
     docs_len: Dict[DocId, DocLength]

@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 from typing import List, Set
 from Types import *
+import dateutil.parser as parser
 
 # QUERY REFINEMENT
 # Includes both query expansion and relevance feedback
@@ -68,3 +69,32 @@ def expand_query(tokens: List[str],
         for synonym in thesaurus.get(token, set()):
             result.add(synonym)
     return list(result)
+
+
+def tag_query_with_zones(tokens: List[str]) -> List[str]:
+    """
+    Tag each token with 5 zones, so we will have 5 versions of each token.
+    :param tokens: List of tokens
+    :return: List of tokens tagged with zones
+    """
+    content_query_tokens = ["content@" + tok for tok in tokens]
+    title_query_tokens = ["title@" + tok for tok in tokens]
+    court_query_tokens = ["court@" + tok for tok in tokens]
+    parties_query_tokens = ["parties@" + tok for tok in tokens]
+    section_query_tokens = ["section@" + tok for tok in tokens]
+
+    return content_query_tokens + title_query_tokens + parties_query_tokens\
+          + section_query_tokens + court_query_tokens
+
+
+def extract_date(query: str) -> List[str]:
+    """
+    Given a query string, try to extract a date. Return empty list if it fails.
+    :param query: The query string
+    :return: A list containing either the formatted extracted date or nothing
+    """
+    try:
+        datetime = parser.parse(query, fuzzy=True)
+        return [datetime.strftime("%Y-%m-%d")]
+    except:
+        return []
