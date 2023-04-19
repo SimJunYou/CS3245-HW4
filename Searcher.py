@@ -4,6 +4,7 @@ from math import log10
 from typing import List
 from Types import *
 
+
 import Config
 
 
@@ -35,6 +36,8 @@ def search_query(query: List[Term],
     query_vector: Vector
     query_vector = calc_query_vector(postings_file, dictionary, query_terms, N)
 
+
+
     # REFINE QUERY VECTOR W/ ROCCHIO ALGO
     if Config.RUN_ROCCHIO:
         query_vector = run_rocchio(Config.ALPHA, Config.BETA, champion_dct, relevant_docs, query_vector)
@@ -42,6 +45,34 @@ def search_query(query: List[Term],
     # CALCULATE DOCUMENT VECTOR
     doc_vector_dct: Dict[DocId, Vector]
     doc_vector_dct = calc_doc_vectors(postings_file, dictionary, query_terms)
+
+    # Adding weights to individual zones
+    for docID, vector in doc_vector_dct.items():
+        for term in vector:
+            if term.startswith("title"):
+                vector[term]*=1.0
+            elif term.startswith("content"):
+                vector[term]*=0.8
+            elif term.startswith("section"):
+                vector[term]*=0.6
+            elif term.startswith("parties"):
+                vector[term]*=0.4               
+            elif term.startswith("court"):
+                vector[term]*=0.2
+
+        doc_vector_dct[docID]=vector
+
+    for term in query_vector:
+        if term.startswith("title"):
+            query_vector[term]*=1.0
+        elif term.startswith("content"):
+            query_vector[term]*=0.8
+        elif term.startswith("section"):
+            query_vector[term]*=0.6
+        elif term.startswith("parties"):
+            query_vector[term]*=0.4               
+        elif term.startswith("court"):
+            query_vector[term]*=0.2
 
     # calculate the final scores for each document
     doc_scores: List[Tuple[DocId, float]] = []
@@ -170,3 +201,5 @@ def get_doc_tfidf_dict(term: str,
         weight_dct[doc_id] = 1 + log10(term_freq)
 
     return weight_dct
+
+

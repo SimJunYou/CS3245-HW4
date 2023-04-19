@@ -27,13 +27,13 @@ PARSING_CONFIG = {
     'NSW Court of Criminal Appeal': {
         'section': 'section, act, case, number, s, crime',
         'num_words': 10, # estimate number of words in a section
-        'parties': 'parties, witnesses, victims, appellant, ms, mr',
+        'parties': 'parties, witnesses, victims, appel, ms, mr',
         'parties_num_words': 3
     },
     'NSW Supreme Court': {
         'section': 'section, act, case, number, s, crime',
         'num_words': 10,
-        'parties': 'parties, witnesses, victims, appellant, ms, mr',
+        'parties': 'parties, witnesses, victims, appel, ms, mr, offend',
         'parties_num_words': 3
     },
     'CA Supreme Court': {
