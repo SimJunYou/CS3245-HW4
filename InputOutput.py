@@ -95,7 +95,7 @@ class PostingReader:
             curr_doc, term_freq, term_pos = self.read_entry()
         return curr_doc, term_freq, term_pos
 
-    def read_entry(self) -> Tuple[DocId, TermFreq] | Tuple[DocId, TermFreq, TermPos]:
+    def read_entry(self) -> Tuple[DocId, TermFreq, TermPos]:
         """
         Using the current position of the instance's file pointer,
         read the next entry in the posting list and return it as a tuple:
@@ -111,6 +111,8 @@ class PostingReader:
             self._curr_pos += self.read_next_int()
             self._remaining_pos = self._term_freq - 1
             self._is_first_read = False
+            if self._remaining_docs == self._remaining_pos == 0:
+                self._done = True
             return self._current_doc, self._term_freq, self._curr_pos
 
         if self._remaining_pos == 0:
@@ -212,7 +214,8 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
 
         for term, posting_list in dictionary.items():
             posting_list_serialized: bytes
-            posting_list_serialized = serialize_posting(term, posting_list, write_pos)
+            posting_list_serialized = serialize_posting(posting_list, write_pos)
+
             # cumulative_ptr stores the number of bytes from the start of the file to the current entry
             # this lets us seek directly to the entry of the term we want
             final_dict[term] = cumulative_ptr
@@ -226,7 +229,7 @@ def write_block(dictionary: Dict[Term, Dict[DocId, List[TermPos]]],
     print(f"Wrote {len(dictionary)} terms into final files")
 
 
-def serialize_posting(term, posting_list: Dict[DocId, List[TermPos]],
+def serialize_posting(posting_list: Dict[DocId, List[TermPos]],
                       write_pos: bool) -> bytes:
     """
     Turns a posting list into a bytearray, and returns the bytearray.
@@ -267,10 +270,10 @@ def serialize_posting(term, posting_list: Dict[DocId, List[TermPos]],
     # add in the header as described in the docstring
     header = [doc_freq]
     final_entries = header + prepared_entries
+
     # variable-byte encode everything in the list of final entries, then return the bytearray
     serialized_list = map(variable_byte_encode, final_entries)
-    out = list(serialized_list)
-    return b"".join(out)  # flatten (using different method for an iterable of bytearrays)
+    return b"".join(serialized_list)  # flatten (using different method for an iterable of bytearrays)
 
 
 def prepare_entry(doc_id: DocId, term_pos_list: List[TermPos]) -> List[int]:

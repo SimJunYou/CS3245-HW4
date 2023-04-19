@@ -19,8 +19,8 @@ THESAURUS_FILENAME: str = "stemmed_thesaurus.pickle"
 
 # RELEVANCE FEEDBACK
 RUN_ROCCHIO: bool = True
-ALPHA: float = 0.01
-BETA: float = 10.0
+ALPHA: float = 0.01  # since we did a lot of query expansion, our search output is not likely to be that accurate
+BETA: float = 10.0   # so we weigh more strongly towards the relevant documents
 
 # CONTENT PARSING
 PARSING_CONFIG = {
@@ -63,7 +63,7 @@ PARSING_CONFIG = {
     'Federal Court of Australia': {
         'section': 'legislation, section, act, catchwords',
         'num_words': 10,
-        'parties': 'parties,judges,respondent,mr, ms',
+        'parties': 'parties, judges, respondent, mr, ms',
         'parties_num_words': 5
     },
     'SG Court of Appeal': {
@@ -84,7 +84,7 @@ PARSING_CONFIG = {
         'parties': 'mr, ms, applicant, counsel, victim, complainant, ‐v‐',
         'parties_num_words': 5
     },
-    'SG District Court':{
+    'SG District Court': {
         'section': 'section, act, case, number, crime, s, ss, CPC, penal, code',
         'num_words': 10,
         'parties': 'parties, judge, counsel, name(s), coram, prosecutor, you, ms, mr',
@@ -97,9 +97,27 @@ PARSING_CONFIG = {
         'parties_num_words': 4
     },
     'NSW Land and Environment Court': {
-        'section': 'apprehended, act, section',
+        'section': 'offence, section, repealed',
         'num_words': 10,  # estimate number of words in a section
-        'parties': 'between, witness, before, honour, appellent, ms, mr, ‐v‐, respondent',
-        'parties_num_words': 4
+        'parties': 'witness, council, appellent, ms, mr, defendant, respondent',
+        'parties_num_words': 5
+    },
+    'UK High Court': {
+        'section': 'offence, section, repealed',
+        'num_words': 10,  # estimate number of words in a section
+        'parties': 'witness, council, claimant, ms, mr, -v-, defendant',
+        'parties_num_words': 10
+    },
+    'SG Privy Council': {
+        'section': 'section, act, case, number, crime, s, ss, CPC, penal, code',
+        'num_words': 10,  # estimate number of words in a section
+        'parties': 'witness, sir, lord, ms, mr, parties, defendant, respondent, prosecutor',
+        'parties_num_words': 10
+    },
+    'Singapore International Commercial Court': {
+        'section': 'section, act, case, number, crime, s, ss, CPC, penal, code',
+        'num_words': 10,
+        'parties': 'parties, judge, counsel, coram, lord',
+        'parties_num_words': 5
     }
 }

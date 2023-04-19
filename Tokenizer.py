@@ -158,8 +158,24 @@ def clean_query_token(token: str) -> str:
 def tokenize_query(query: str) -> List[str]:
     """
     Takes in a string and performs tokenization, stemming and case-folding.
+    If the string contains a phrasal query (terms enclosed by ""), then
+    leave it as a single token with the terms within it stemmed. If
+    the token is AND/OR, then leave it as is
     :param query: the string to process
     :return: a list of processed tokens
     """
-    tokens = nltk.word_tokenize(query)
-    return [STEMMER.stem(token.strip().casefold()) for token in tokens]
+    tokenizer = nltk.RegexpTokenizer(r'\w+|\s+|"[^"]+"')
+    tokens = tokenizer.tokenize(query)
+    result = []
+    for token in tokens:
+        token = token.strip().strip('"')
+        if not token:
+            continue
+        elif token == "AND":
+            result.append(token)
+        elif ' ' in token:  # if the token is a phrase,
+            stemmed_phrase = ' '.join([STEMMER.stem(subtoken.strip().casefold()) for subtoken in token.split()])
+            result.append(stemmed_phrase)
+        else:  # if the token is a single word
+            result.append(STEMMER.stem(token.strip().casefold()))
+    return result

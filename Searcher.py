@@ -1,13 +1,14 @@
 from InputOutput import PostingReader
 from QueryRefinement import run_rocchio
 from math import log10, sqrt
-from typing import List
+from typing import List, Set
 from Types import *
 
 import Config
 
 
-def search_query(query: List[Term],
+def search_query(free_query: List[Term],
+                 phrasal_query: List[Term],
                  dictionary: Dict[Term, int],
                  docs_len_dct: Dict[DocId, DocLength],
                  postings_file: str,
@@ -18,7 +19,8 @@ def search_query(query: List[Term],
     Using the PostingReader interface, process a given query by calculating
     scores for each document from its posting list, then return at most 10
     document IDs with the highest scores.
-    :param query: The query as a list of tokens
+    :param free_query: The free text query as a list of tokens
+    :param phrasal_query: The phrasal query as a list of tokens
     :param dictionary: A dictionary of terms to their positions in the postings list
     :param docs_len_dct: A dictionary of doc ID to doc length
     :param postings_file: The name of the postings list file
@@ -26,25 +28,47 @@ def search_query(query: List[Term],
     :param champion_dct: The champion list as a dictionary
     :return: A list of relevant document IDs
     """
-    all_query_terms = set(query)
+    free_text_terms = set(free_query)
     dictionary_terms = set(dictionary.keys())
-    query_terms = list(all_query_terms & dictionary_terms)
+    query_terms = list(free_text_terms & dictionary_terms)
     N = len(docs_len_dct)
+
+    print(query_terms)
+    # query_terms -> a mix of free text and phrasal queries
+    for phrase in phrasal_query:
+        get_posting_list(postings_file, dictionary, phrasal_query)
 
     # CALCULATE QUERY VECTOR
     query_vector: Vector
     query_vector = calc_query_vector(postings_file, dictionary, query_terms, N)
 
-    print("Before relevance feedback:", len(query_vector))
     # REFINE QUERY VECTOR W/ ROCCHIO ALGO
     if Config.RUN_ROCCHIO:
         query_vector = run_rocchio(
             Config.ALPHA, Config.BETA, champion_dct, relevant_docs, query_vector)
-    print("After relevance feedback:", len(query_vector))
 
     # CALCULATE DOCUMENT VECTOR
     doc_vector_dct: Dict[DocId, Vector]
     doc_vector_dct = calc_doc_vectors(postings_file, dictionary, query_terms)
+
+    def apply_weights_to_vector(vct: Vector) -> Vector:
+        for term in vct:
+            if term.startswith("title"):
+                vct[term] *= 1.0
+            elif term.startswith("content"):
+                vct[term] *= 0.8
+            elif term.startswith("section"):
+                vct[term] *= 0.6
+            elif term.startswith("parties"):
+                vct[term] *= 0.4
+            elif term.startswith("court"):
+                vct[term] *= 0.2
+        return vct
+
+    # Adding weights to individual zones
+    for docID, vector in doc_vector_dct.items():
+        doc_vector_dct[docID] = apply_weights_to_vector(vector)
+    query_vector = apply_weights_to_vector(query_vector)
 
     # calculate the final scores for each document
     doc_scores: List[Tuple[DocId, float]] = []
@@ -70,6 +94,24 @@ def search_query(query: List[Term],
 
     print("Num docs found:", len(doc_scores))
     return [x[0] for x in doc_scores]  # we only want to keep the doc IDs!
+
+
+def get_posting_list(postings_file, dictionary, query_term) -> Dict[DocId, Set[TermPos]]:
+    """
+    Gets the posting list of a single term from the postings list file as a dictionary.
+    :param whatever: ...
+    TODO
+    """
+    with PostingReader(postings_file, dictionary) as pf:
+        pf.seek_term(query_term)
+        doc_id_to_pos = {}
+        while not pf.is_done():
+            doc_id, term_freq, term_pos = pf.read_entry()
+            pos_set = doc_id_to_pos.get(doc_id, set())
+            pos_set.add(term_pos)
+            doc_id_to_pos[doc_id] = pos_set
+    return doc_id_to_pos
+
 
 
 def calc_query_vector(postings_file: str,
@@ -104,68 +146,8 @@ def boolean_and(listA: List[DocId], listB: List[DocId]):
     """
     return sorted(list(set(listA).intersection(set(listB))))
 
-# List[Tuple[Term, TermWeight]
 
-
-def generate_SP(postings: List[DocId]) -> List[Tuple[DocId, SkipPointer]]:
-    """
-    Turns list into list of tuples with second element being the skip pointer
-
-    :param postings: list of document IDs e.g [1,2,3,4,5]
-    :return: list of tuple e.g [(1,3),(2,None),(3,5), (4,None), (5, None)]
-    """
-    root_of_len = int(sqrt(len(postings)))
-    for i in range(len(postings)):
-        if (not i % root_of_len and i + root_of_len < len(postings)):
-            postings[i] = (postings[i], i + root_of_len)
-        else:
-            postings[i] = (postings[i], None)
-    return postings
-
-
-def and_operator(listA: List[Tuple[DocId, SkipPointer]], listB: List[Tuple[DocId, SkipPointer]]) -> List[Tuple[DocId, SkipPointer]]:
-    """
-    And operation to find intersect between two lists
-    :param listA: list of IDs in first list
-    :param listB: list of IDs in second list
-    :return: list of tuple (IDs, SP) in both lists 
-    """
-    res = []
-    i = 0  # Pointer for listA
-    j = 0  # Pointer for listB
-
-    while (i < len(listA) and j < len(listB)):
-        # If in both list, append
-        if (listA[i][0] == listB[j][0]):
-            res.append(listA[i][0])
-            i += 1
-            j += 1
-        elif (listA[i][0] < listB[j][0]):
-            # Use skip pointers if possible
-            if (listA[i][1] is not None):
-                skip_pointer = listA[i][1]
-                if (listA[skip_pointer][0] <= listB[j][0]):
-                    i = skip_pointer
-                else:
-                    i += 1
-            else:
-                i += 1
-
-        # Case of listA[i][0] > listB[j][0]
-        else:
-            # Use skip pointers whenever possible
-            if (listB[j][1] is not None):
-                skip_pointer = listB[j][1]
-                if (listB[skip_pointer][0] <= listA[i][0]):
-                    j = skip_pointer
-                else:
-                    j += 1
-            else:
-                j += 1
-    return generate_SP(res)
-
-
-def getSubList(listOfTuple: List[Tuple[DocId, SkipPointer]], index: int) -> List[DocId]:
+def getSubList(listOfTuple: List[Tuple[DocId, int]], index: int) -> List[DocId]:
     """
     Extract list from list of tuple
 
@@ -173,10 +155,10 @@ def getSubList(listOfTuple: List[Tuple[DocId, SkipPointer]], index: int) -> List
     :param index: index at which u want to get the element from
     :return: list e.g [1,2,3,4,5]
     """
-    if (not len(listOfTuple)):
+    if not len(listOfTuple):
         return []
 
-    if (type(listOfTuple[0]) is not tuple):
+    if type(listOfTuple[0]) is not tuple:
         return listOfTuple
 
     return list(zip(*listOfTuple))[index]
