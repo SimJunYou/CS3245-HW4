@@ -7,6 +7,7 @@ import dateutil.parser as parser
 # QUERY REFINEMENT
 # Includes both query expansion and relevance feedback
 
+
 def calc_centroid(champion_dct: Dict[DocId, List[Tuple[Term, TermWeight]]],
                   in_query_relevant_docs: List[DocId]) -> Vector:
     """

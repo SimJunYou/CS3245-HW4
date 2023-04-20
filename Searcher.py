@@ -14,6 +14,7 @@ def search_boolean_query(query_tokens: List[str],
                          postings_file: str) -> List[DocId]:
     """
     Perform a boolean query based on the given query tokens.
+    Will try to find a perfect match, but failing that, will return the last best result
     Return a list of relevant document IDs.
     :param query_tokens: List of query tokens
     :param pointer_dct: Dictionary of term -> postings list pointer
@@ -22,6 +23,7 @@ def search_boolean_query(query_tokens: List[str],
     """
 
     subqueries = [subquery for subquery in query_tokens if not subquery == 'AND']
+
     all_search_outputs: List[DocId] = []
     for subquery in subqueries:
         # PERFORM PHRASAL QUERY SEARCH FOR CURRENT SUBQUERY
@@ -43,15 +45,13 @@ def search_boolean_query(query_tokens: List[str],
         # EARLY TERMINATION
         if not intermediate_search_outputs:
             # if current subquery gives no results, terminate early
-            all_search_outputs = []
             break
 
         # INTERSECT WITH EXISTING RESULTS
         if all_search_outputs:
-            intermediate_search_outputs = boolean_and(intermediate_search_outputs, all_search_outputs)
-            if not intermediate_search_outputs:
+            intersected = boolean_and(intermediate_search_outputs, all_search_outputs)
+            if not intersected:
                 # early termination condition #2 -- if intersect yields nothing
-                all_search_outputs = []
                 break
         else:
             all_search_outputs += intermediate_search_outputs
@@ -115,8 +115,11 @@ def search_phrasal_query(phrasal_query: str,
                 new_term_pos_set = result[doc_id] & shifted_term_pos_set
                 if new_term_pos_set:  # if the intersection with the new doc is not empty, write it to new_results
                     new_result[doc_id] = new_term_pos_set
+            if not new_result:
+                # early termination
+                result = dict()
+                break
             result = new_result
-
     # We only want the document IDs to be returned
     result_docs: List[DocId] = list(result.keys())
     return result_docs
@@ -155,6 +158,18 @@ def search_freetext_query(query_tokens: List[Term],
         query_vector = run_rocchio(
             Config.ALPHA, Config.BETA, champion_dct, relevant_docs, query_vector)
 
+    # QUERY PRUNING
+    # We remove all query terms below a certain threshold, set as a fraction of the top weight
+    # This is only helpful when we run query expansion due to the large number of query tokens, so we include that
+    # as a condition here to prevent accidental triggering
+    if Config.RUN_QUERY_PRUNING and Config.RUN_QUERY_EXPANSION:
+        # print(f"avg weight in query: {sum(query_vector.values())/len(query_vector)}")
+        # print(f"total num of weights: {len(query_vector)}")
+        threshold = max(query_vector.values()) / Config.PRUNING_THRESHOLD
+        # print(f"num terms above threshold: {sum([w > threshold for w in query_vector.values()])}")
+        query_vector = {term: weight for term, weight in query_vector.items() if weight >= threshold}
+        query_terms = set(query_vector.keys())
+
     # CALCULATE DOCUMENT VECTOR
     doc_vector_dct: Dict[DocId, Vector]
     doc_vector_dct = calc_doc_vectors(postings_file, dictionary, query_terms)
@@ -162,16 +177,14 @@ def search_freetext_query(query_tokens: List[Term],
     # ADDING WEIGHTS TO ZONES
     def apply_weights_to_vector(vct: Vector) -> Vector:
         for term in vct:
-            if term.startswith("title"):  # titles should be boosted, since they are a central part of a document
-                vct[term] *= 1.0
+            if term.startswith("date"):  # dates and titles should be boosted since they are important
+                vct[term] *= 1.5
+            elif term.startswith("title"):
+                vct[term] *= 1.5
             elif term.startswith("content"):
+                pass  # multiplier is 1.0
+            else:  # other sections can be ranked lower than the content itself
                 vct[term] *= 0.8
-            elif term.startswith("section"):  # other sections can be ranked lower than the content itself
-                vct[term] *= 0.6
-            elif term.startswith("parties"):  # this ranking is arbitrary
-                vct[term] *= 0.4
-            elif term.startswith("court"):
-                vct[term] *= 0.2
         return vct
 
     for docID, vector in doc_vector_dct.items():
@@ -195,12 +208,6 @@ def search_freetext_query(query_tokens: List[Term],
     doc_scores = sorted(doc_scores, key=lambda x: x[0])
     doc_scores = sorted(doc_scores, key=lambda x: x[1], reverse=True)
 
-    # rough heuristic -- since our relevance feedback is weighted so strongly against our query,
-    # it is likely that relevant documents will be found higher in our output
-    # we can cut our large amount of predictions by approximately half
-    # doc_scores = doc_scores[:len(doc_scores) // 2]
-
-    print("Num docs found:", len(doc_scores))
     return [x[0] for x in doc_scores]  # we only want to keep the doc IDs!
 
 

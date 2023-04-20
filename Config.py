@@ -18,9 +18,19 @@ RUN_QUERY_EXPANSION: bool = True
 THESAURUS_FILENAME: str = "stemmed_thesaurus.pickle"
 
 # RELEVANCE FEEDBACK
+# Classically, beta is smaller than alpha since the original query should carry a higher weightage.
+# But for this dataset, we perform a lot of query expansion, so our query itself is not likely to be that accurate.
+# We rely heavily on the relevant documents provided to narrow down our results, so make beta higher than alpha.
 RUN_ROCCHIO: bool = True
-ALPHA: float = 1.  # since we did a lot of query expansion, our search output is not likely to be that accurate
-BETA: float = 10.   # so we weigh more strongly towards the relevant documents
+ALPHA: float = 0.8  # determined through experimentation
+BETA: float = 1.1
+
+# QUERY PRUNING
+# Remove any terms with weight below the threshold (max_weight/threshold_val) from the query vector
+# We are pruning AFTER relevance feedback, so relevant terms should have gained more weight and vice versa for
+# non-relevant terms. Thus, we can safely put the threshold somewhere around 4 (= 1/4 of max weight).
+RUN_QUERY_PRUNING: bool = False  # DISABLED FOR NOW
+PRUNING_THRESHOLD: float = 4
 
 # CONTENT PARSING
 PARSING_CONFIG = {

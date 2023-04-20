@@ -49,12 +49,19 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
     # handle case where it is a phrasal query and boolean query
     is_boolean_query = 'AND' in query_tokens
 
+    search_output: List[DocId] = []
+
+    print(f"running {'non-' if not is_boolean_query else ''}boolean query")
+
     # HANDLE BOOLEAN QUERY
     if is_boolean_query:
         search_output = search_boolean_query(query_tokens, pointer_dct, postings_file)
-    
+
     # HANDLE FREE TEXT QUERY
-    else:
+    # There is the possibility of running this as a backup in case the boolean query returns nothing
+    if (not is_boolean_query) or (not search_output):
+        if is_boolean_query:
+            print("boolean query failed! defaulting to free text")
         # CONVERT PHRASAL QUERIES INTO FREE TEXT
         # For now, we're not sure how to handle phrasal queries in free text...
         all_tokens = []
@@ -73,9 +80,6 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
         # TAGGING QUERY WITH ZONES
         all_tokens = sum(tag_query_with_zones(all_tokens), [])  # flatten list
         all_tokens += ["date@" + date for date in extracted_dates]  # add in any dates extracted
-        # TODO: Add weights for date zone tag
-
-        print("Query tokens after expansion:", all_tokens)
 
         # SEARCHING
         search_output: List[DocId]
@@ -86,15 +90,21 @@ def run_search(dict_file: str, postings_file: str, queries_file: str, results_fi
                                               relevant_docs,
                                               champion_dct)
 
+    # DEBUG PRINTS
     # true_pos = sum([rd in search_output for rd in relevant_docs])
-    # precision = true_pos / len(search_output)
+    # precision = true_pos / len(search_output) if len(search_output) > 0 else 0
     # recall = true_pos / len(relevant_docs)
     # f2_score = 5 * (precision * recall) / (4*precision + recall)
+    # def find_item(lst, item):
+    #     try:
+    #         return lst.index(item)
+    #     except:
+    #         return -2
+    # print("Positions of results:", [1+find_item(search_output, rd) for rd in relevant_docs])
+    # print(f"Precision: {precision}, Recall: {recall}, F2: {f2_score}")
 
     output = " ".join(map(str, search_output))
-    print("Docs found:", len(search_output))
-    # print("Positions of results:", [1+search_output.index(rd) for rd in relevant_docs])
-    # print(f"Precision: {precision}, Recall: {recall}, F2: {f2_score}")
+    print("docs found:", len(search_output))
     with open(results_file, "w") as rf:
         rf.write(output)
 
